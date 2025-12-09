@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+venv/
+env/
+ENV/
+
+# CDK
+cdk.out/
+cdk.context.json
+*.js
+*.d.ts
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# AWS
+.aws-sam/
+samconfig.toml
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.hypothesis/
+coverage.xml
+*.cover
+
+# CDK specific
+*.js.map
+*.d.ts.map
+
+# Lambda deployment packages
+*.zip
+lambda-packages/
+
+# Terraform (if used alongside CDK)
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Local configuration overrides
+config.local.yaml
+config.dev.yaml
