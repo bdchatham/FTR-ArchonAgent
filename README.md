@@ -1,6 +1,8 @@
 # Archon - System Documentation RAG Chat Bot
 
-Archon is a production-grade Retrieval-Augmented Generation (RAG) system that monitors `.kiro/` documentation in public GitHub repositories and provides intelligent query capabilities for engineers and agents. Built with AWS CDK, LangChain, and AWS Bedrock, Archon serves as a system engineering expert to help teams understand their product architecture.
+Archon is a production-grade Retrieval-Augmented Generation (RAG) system that monitors `.kiro/` documentation in public GitHub repositories and provides intelligent query capabilities for engineers and agents. Built with AWS CDK (TypeScript), LangChain, and AWS Bedrock, Archon serves as a system engineering expert to help teams understand their product architecture.
+
+The infrastructure follows AWS Well-Architected Framework best practices for operational excellence, security, reliability, performance efficiency, and cost optimization.
 
 ## Overview
 
@@ -57,6 +59,7 @@ Archon consists of two independent systems:
 - **API**: Amazon API Gateway (REST)
 - **Scheduling**: Amazon EventBridge
 - **State Management**: Amazon DynamoDB
+- **GitHub Integration**: PyGithub library
 
 ## Prerequisites
 

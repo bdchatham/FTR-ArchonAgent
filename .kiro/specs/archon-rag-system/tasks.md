@@ -15,11 +15,13 @@
   - **Feature: archon-rag-system, Property 2: GitHub URL validation**
   - **Validates: Requirements 1.2**
 
-- [ ] 2. Implement GitHub client and rate limiting
-  - Create GitHubClient class with methods to fetch repository contents and file content
-  - Implement RateLimiter to prevent exceeding GitHub API limits
-  - Add URL validation and repository access verification
+- [ ] 2. Implement GitHub client using PyGithub
+  - Create GitHubClient class wrapping PyGithub's Github class
+  - Implement methods to fetch repository contents and file content using PyGithub API
+  - Add URL parsing to extract org/repo from GitHub URLs
+  - Add repository access verification using PyGithub
   - Implement error handling for API failures (404, 403, timeouts)
+  - Note: PyGithub handles rate limiting automatically
   - _Requirements: 3.1, 3.3, 3.5, 9.1, 9.2, 9.3_
 
 - [ ] 2.1 Write property test for independent repository processing
@@ -164,36 +166,40 @@
   - Implement proper type hints throughout
   - _Requirements: 4.2, 4.3, 6.5_
 
-- [ ] 10. Implement shared resources CDK stack
-  - Create ArchonSharedResources stack class
+- [ ] 10. Implement shared resources CDK stack (TypeScript)
+  - Create ArchonSharedResources stack class following AWS Well-Architected Framework
   - Define OpenSearch Serverless collection with vector search configuration
   - Configure index with 1536-dimension vector field
-  - Set up IAM policies for Lambda access to OpenSearch
+  - Set up least-privilege IAM policies for Lambda access to OpenSearch
+  - Enable encryption at rest for OpenSearch
   - Add CloudFormation outputs for resource ARNs
+  - Apply resource tags (Environment, Project, Owner)
   - _Requirements: 2.1, 2.2, 4.2_
 
-- [ ] 11. Implement cron job CDK stack
-  - Create ArchonCronStack class
+- [ ] 11. Implement cron job CDK stack (TypeScript)
+  - Create ArchonCronStack class following AWS Well-Architected Framework
   - Define EventBridge scheduled rule with configurable cron expression
-  - Create Lambda function resource for document monitor
-  - Define DynamoDB table for change tracking
-  - Configure IAM roles with permissions for GitHub, Bedrock, OpenSearch, DynamoDB
-  - Set up CloudWatch log groups and alarms
+  - Create Lambda function resource for document monitor with proper memory/timeout settings
+  - Define DynamoDB table for change tracking with encryption enabled
+  - Configure least-privilege IAM roles with specific resource ARNs for Bedrock, OpenSearch, DynamoDB
+  - Set up CloudWatch log groups with retention policies and alarms for errors
   - Add environment variables for configuration
+  - Apply resource tags (Environment, Project, Owner)
   - _Requirements: 2.1, 2.2, 3.1, 3.2_
 
-- [ ] 12. Implement agent CDK stack
-  - Create ArchonAgentStack class
-  - Define API Gateway REST API with /query endpoint
-  - Create Lambda function resource for query handler
+- [ ] 12. Implement agent CDK stack (TypeScript)
+  - Create ArchonAgentStack class following AWS Well-Architected Framework
+  - Define API Gateway REST API with /query endpoint and throttling limits
+  - Create Lambda function resource for query handler with proper memory/timeout settings
   - Configure Lambda integration with API Gateway
-  - Set up IAM roles with permissions for Bedrock and OpenSearch
-  - Configure CloudWatch log groups and alarms
+  - Set up least-privilege IAM roles with specific resource ARNs for Bedrock and OpenSearch
+  - Configure CloudWatch log groups with retention policies and alarms for errors/latency
   - Add CORS configuration for API Gateway
   - Add environment variables for configuration
+  - Apply resource tags (Environment, Project, Owner)
   - _Requirements: 2.1, 2.3, 5.1_
 
-- [ ] 13. Implement CDK configuration loader
+- [ ] 13. Implement CDK configuration loader (TypeScript)
   - Create ConfigLoader utility class for CDK
   - Implement YAML parsing for infrastructure configuration
   - Add validation for required fields and valid values
@@ -201,12 +207,12 @@
   - Add error handling for missing or invalid configuration
   - _Requirements: 1.1, 1.3, 8.1, 8.3_
 
-- [ ] 14. Create CDK app entry point
+- [ ] 14. Create CDK app entry point (TypeScript)
   - Create bin/archon.ts with CDK app initialization
   - Load configuration using ConfigLoader
   - Instantiate all three stacks (Shared, Cron, Agent)
   - Configure stack dependencies (Shared → Cron/Agent)
-  - Add stack tags for resource organization
+  - Add stack tags for resource organization (Environment, Project, Owner, CostCenter)
   - _Requirements: 2.1, 2.4, 8.3_
 
 - [ ] 15. Set up Lambda deployment packages
