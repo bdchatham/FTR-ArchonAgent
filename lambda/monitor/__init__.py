@@ -6,14 +6,14 @@ import os
 import sys
 from datetime import datetime, timezone
 
-# Add shared directory to path
+# Add lambda directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from shared.config_manager import ConfigManager
-from shared.github_client import GitHubClient
-from shared.change_tracker import ChangeTracker
-from shared.ingestion_pipeline import IngestionPipeline
-from shared.vector_store_manager import VectorStoreManager
+from config.config_manager import ConfigManager
+from git.github_client import GitHubClient
+from storage.change_tracker import ChangeTracker
+from ingestion.ingestion_pipeline import IngestionPipeline
+from storage.vector_store_manager import VectorStoreManager
 from monitor.document_monitor import DocumentMonitor
 
 # Configure logging

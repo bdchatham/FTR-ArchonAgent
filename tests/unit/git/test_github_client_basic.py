@@ -5,10 +5,9 @@ import sys
 from unittest.mock import Mock, patch
 import pytest
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lambda'))
+# Lambda directory added to path via conftest.py
 
-from shared.github_client import (
+from git.github_client import (
     GitHubClient,
     GitHubClientError,
     RepositoryNotFoundError,

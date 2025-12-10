@@ -5,10 +5,9 @@ import sys
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lambda'))
+# Lambda directory added to path via conftest.py
 
-from shared.change_tracker import ChangeTracker, DynamoDBThrottlingError, DynamoDBConnectionError
+from storage.change_tracker import ChangeTracker, DynamoDBThrottlingError, DynamoDBConnectionError
 from botocore.exceptions import ClientError
 
 

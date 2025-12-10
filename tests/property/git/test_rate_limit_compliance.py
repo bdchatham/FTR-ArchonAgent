@@ -11,10 +11,8 @@ from hypothesis import given, strategies as st, assume
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.github_client import GitHubClient
+from git.github_client import GitHubClient
 
 
 @st.composite

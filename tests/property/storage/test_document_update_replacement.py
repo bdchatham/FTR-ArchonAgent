@@ -11,10 +11,8 @@ from datetime import datetime, timedelta
 from hypothesis import given, strategies as st, settings
 from unittest.mock import MagicMock
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.change_tracker import ChangeTracker
+from storage.change_tracker import ChangeTracker
 
 
 # Strategies for generating test data

@@ -11,10 +11,8 @@ from hypothesis import given, strategies as st, assume
 from unittest.mock import Mock, patch
 from github import GithubException
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.github_client import (
+from git.github_client import (
     GitHubClient,
     RepositoryNotFoundError,
     RepositoryAccessDeniedError,

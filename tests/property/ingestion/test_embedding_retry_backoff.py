@@ -11,10 +11,8 @@ import time
 from unittest.mock import Mock, call
 from hypothesis import given, strategies as st, settings
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.ingestion_pipeline import IngestionPipeline, EmbeddingGenerationError
+from ingestion.ingestion_pipeline import IngestionPipeline, EmbeddingGenerationError
 
 
 # Strategy for generating text

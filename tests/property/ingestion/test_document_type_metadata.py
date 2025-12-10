@@ -11,10 +11,8 @@ from unittest.mock import Mock
 from hypothesis import given, strategies as st, settings
 from datetime import datetime, timezone
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.ingestion_pipeline import IngestionPipeline, Document
+from ingestion.ingestion_pipeline import IngestionPipeline, Document
 
 
 # Strategy for generating documents with various types

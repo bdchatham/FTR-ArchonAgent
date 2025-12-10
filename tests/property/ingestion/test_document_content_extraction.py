@@ -11,13 +11,11 @@ from hypothesis import given, strategies as st, settings
 from unittest.mock import Mock, patch
 from datetime import datetime, timezone
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.config_manager import RepositoryConfig
-from shared.github_client import GitHubClient, FileMetadata
-from shared.change_tracker import ChangeTracker
-from shared.ingestion_pipeline import IngestionPipeline, Document
+from config.config_manager import RepositoryConfig
+from git.github_client import GitHubClient, FileMetadata
+from storage.change_tracker import ChangeTracker
+from ingestion.ingestion_pipeline import IngestionPipeline, Document
 from monitor.document_monitor import DocumentMonitor
 
 
@@ -183,7 +181,7 @@ def test_content_extraction_completeness(repo_url, file_metadata):
         fetch_attempts.append(file_path)
         # Make every other file fail
         if len(fetch_attempts) % 2 == 0:
-            from shared.github_client import GitHubAPIError
+            from git.github_client import GitHubAPIError
             raise GitHubAPIError("Simulated fetch failure")
         return f"Content for {file_path}"
     

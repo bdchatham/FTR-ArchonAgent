@@ -10,10 +10,8 @@ import sys
 from unittest.mock import Mock, MagicMock
 from hypothesis import given, strategies as st, settings, assume, HealthCheck
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.vector_store_manager import VectorStoreManager, VectorDocument
+from storage.vector_store_manager import VectorStoreManager, VectorDocument
 
 
 # Strategy for generating vectors (using smaller dimension for testing)

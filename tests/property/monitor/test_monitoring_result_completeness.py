@@ -11,13 +11,11 @@ from hypothesis import given, strategies as st, settings
 from unittest.mock import Mock
 from datetime import datetime, timezone
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.config_manager import Config, RepositoryConfig, InfrastructureConfig, ModelConfig
-from shared.github_client import GitHubClient, FileMetadata
-from shared.change_tracker import ChangeTracker
-from shared.ingestion_pipeline import IngestionPipeline, Document
+from config.config_manager import Config, RepositoryConfig, InfrastructureConfig, ModelConfig
+from git.github_client import GitHubClient, FileMetadata
+from storage.change_tracker import ChangeTracker
+from ingestion.ingestion_pipeline import IngestionPipeline, Document
 from monitor.document_monitor import DocumentMonitor, MonitoringResult
 
 

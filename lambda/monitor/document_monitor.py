@@ -7,11 +7,11 @@ from typing import List, Optional
 import sys
 import os
 
-# Add shared directory to path
+# Add lambda directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from shared.config_manager import Config, RepositoryConfig
-from shared.github_client import (
+from config.config_manager import Config, RepositoryConfig
+from git.github_client import (
     GitHubClient,
     GitHubClientError,
     RepositoryNotFoundError,
@@ -19,8 +19,8 @@ from shared.github_client import (
     GitHubAPIError,
     FileMetadata
 )
-from shared.change_tracker import ChangeTracker, ChangeTrackerError
-from shared.ingestion_pipeline import IngestionPipeline, Document, IngestionError
+from storage.change_tracker import ChangeTracker, ChangeTrackerError
+from ingestion.ingestion_pipeline import IngestionPipeline, Document, IngestionError
 
 
 # Configure logging
@@ -344,7 +344,7 @@ def lambda_handler(event, context):
     """
     try:
         # Load configuration
-        from shared.config_manager import ConfigManager
+        from config.config_manager import ConfigManager
         config_manager = ConfigManager()
         config = config_manager.load_config(os.environ.get('CONFIG_PATH', '/var/task/config/config.yaml'))
         
@@ -353,8 +353,8 @@ def lambda_handler(event, context):
         change_tracker = ChangeTracker(table_name=os.environ.get('DYNAMODB_TABLE', 'archon-document-tracker'))
         
         # Initialize ingestion pipeline (requires embeddings and vector store)
-        from shared.ingestion_pipeline import IngestionPipeline
-        from shared.vector_store_manager import VectorStoreManager
+        from ingestion.ingestion_pipeline import IngestionPipeline
+        from storage.vector_store_manager import VectorStoreManager
         from langchain_aws import BedrockEmbeddings
         
         embeddings = BedrockEmbeddings(

@@ -11,10 +11,8 @@ from hypothesis import given, strategies as st
 import yaml
 import sys
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.config_manager import ConfigManager, ConfigValidationError
+from config.config_manager import ConfigManager, ConfigValidationError
 
 
 # Strategies for generating valid configuration components

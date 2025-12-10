@@ -9,10 +9,8 @@ import os
 import sys
 from hypothesis import given, strategies as st, assume
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.config_manager import ConfigManager
+from config.config_manager import ConfigManager
 
 
 # Strategies for generating URLs

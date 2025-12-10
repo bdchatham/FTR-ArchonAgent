@@ -10,10 +10,8 @@ import sys
 from unittest.mock import Mock, MagicMock
 from hypothesis import given, strategies as st, settings
 
-# Add lambda directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'lambda'))
 
-from shared.ingestion_pipeline import IngestionPipeline, Document
+from ingestion.ingestion_pipeline import IngestionPipeline, Document
 from datetime import datetime, timezone
 
 
