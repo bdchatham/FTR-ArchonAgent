@@ -75,7 +75,7 @@
   - **Feature: archon-rag-system, Property 23: Document type metadata presence**
   - **Validates: Requirements 10.3**
 
-- [-] 5. Implement vector store manager with OpenSearch
+- [x] 5. Implement vector store manager with OpenSearch
   - Create VectorStoreManager class to interface with OpenSearch Serverless
   - Implement index creation with vector field configuration (1536 dimensions)
   - Add upsert_vectors method to store embeddings with metadata
@@ -84,11 +84,11 @@
   - Integrate with LangChain OpenSearch vector store
   - _Requirements: 4.2, 4.3, 4.4, 6.2_
 
-- [ ] 5.1 Write property test for similarity search ordering
+- [x] 5.1 Write property test for similarity search ordering
   - **Feature: archon-rag-system, Property 16: Similarity search ordering**
   - **Validates: Requirements 6.2**
 
-- [ ] 6. Implement document monitor Lambda function
+- [x] 6. Implement document monitor Lambda function
   - Create DocumentMonitor class to orchestrate monitoring workflow
   - Implement execute method to check all configured repositories
   - Add logic to fetch repository contents, detect changes, and process documents
@@ -97,23 +97,23 @@
   - Add comprehensive error handling and logging
   - _Requirements: 3.1, 3.3, 3.4, 3.5_
 
-- [ ] 6.1 Write property test for complete repository scanning
+- [x] 6.1 Write property test for complete repository scanning
   - **Feature: archon-rag-system, Property 5: Complete repository scanning**
   - **Validates: Requirements 3.1**
 
-- [ ] 6.2 Write property test for document content extraction
+- [x] 6.2 Write property test for document content extraction
   - **Feature: archon-rag-system, Property 6: Document content extraction**
   - **Validates: Requirements 3.3**
 
-- [ ] 6.3 Write property test for monitoring result completeness
+- [x] 6.3 Write property test for monitoring result completeness
   - **Feature: archon-rag-system, Property 7: Monitoring result completeness**
   - **Validates: Requirements 3.4**
 
-- [ ] 6.4 Write property test for public repository restriction
+- [x] 6.4 Write property test for public repository restriction
   - **Feature: archon-rag-system, Property 19: Public repository restriction**
   - **Validates: Requirements 9.1**
 
-- [ ] 6.5 Write property test for permission error handling
+- [x] 6.5 Write property test for permission error handling
   - **Feature: archon-rag-system, Property 20: Permission error handling**
   - **Validates: Requirements 9.2**
 
