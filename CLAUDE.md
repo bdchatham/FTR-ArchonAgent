@@ -20,7 +20,7 @@ The human owner should fill this section out once.
 - **Type:** `<service | library | infra-only | monorepo-package | other>`
 - **Primary runtime:** `<e.g. Python Lambda, Node.js service, Go binary, etc.>`
 
-When documenting, focus on this service’s role in the overall system rather than generic technology explanations.
+When documenting, focus on this service's role in the overall system rather than generic technology explanations.
 
 ---
 
@@ -83,7 +83,7 @@ All non-trivial statements in `.kiro/docs` must be grounded in this repository o
 - Your own guesses or prior knowledge that cannot be confirmed from this repo.
 - Generic knowledge of AWS or frameworks, unless used only as context.
 
-Whenever you describe behavior, include a “Source” subsection if it is not trivial.
+Whenever you describe behavior, include a "Source" subsection if it is not trivial.
 
 Example:
 
@@ -98,7 +98,7 @@ Then:
 If you cannot find evidence for something:
 
 - Do NOT state it as fact.
-- Optionally add a “Gaps and open questions” section with TODOs, e.g.:
+- Optionally add a "Gaps and open questions" section with TODOs, e.g.:
 
   - `TODO: Confirm whether this Lambda still supports the legacy path. No references found in current code.`
 
@@ -117,9 +117,9 @@ Archon uses these docs as chunks in a RAG pipeline. Write to support retrieval a
 2. **Direct, factual tone**
 
    - Prefer:
-     - “The query Lambda generates an embedding with Bedrock and performs a vector search in OpenSearch.”
+     - "The query Lambda generates an embedding with Bedrock and performs a vector search in OpenSearch."
    - Over:
-     - “Our blazing-fast AI service cleverly leverages cutting-edge technology.”
+     - "Our blazing-fast AI service cleverly leverages cutting-edge technology."
 
 3. **Explicit structure**
 
@@ -131,7 +131,7 @@ Archon uses these docs as chunks in a RAG pipeline. Write to support retrieval a
 
    - Do not include large, generic tutorials.
    - Do not paste external docs verbatim.
-   - Summarize how external systems are used by this repo and, if needed, link out in a “Further reading” subsection.
+   - Summarize how external systems are used by this repo and, if needed, link out in a "Further reading" subsection.
 
 ---
 
@@ -151,7 +151,7 @@ If you make a change that affects how the system behaves, you should also update
 
 2. Update the corresponding docs in the same change:
    - Adjust descriptions to match the new behavior.
-   - Add or update “Source” references.
+   - Add or update "Source" references.
    - Remove or fix stale references.
 
 3. If you are unsure about a behavior:
@@ -162,16 +162,16 @@ If you make a change that affects how the system behaves, you should also update
 
 When a user asks, for example:
 
-- “How does the Archon ingestion flow work here?”
-- “Which Lambda processes the `/query` API?”
-- “Where is the vector index defined?”
+- "How does the Archon ingestion flow work here?"
+- "Which Lambda processes the `/query` API?"
+- "Where is the vector index defined?"
 
 You should:
 
 1. Check `.kiro/docs` first:
    - If the docs are missing or wrong, correct them.
 2. Then answer the question by referencing those docs.
-   - Example: “See `.kiro/docs/architecture.md#document-ingestion-flow` for the full sequence.”
+   - Example: "See `.kiro/docs/architecture.md#document-ingestion-flow` for the full sequence."
 
 This keeps the docs and the RAG knowledge base aligned.
 
@@ -213,5 +213,5 @@ Template:
 By following this contract, you ensure that:
 
 - Engineers and agents get accurate, inspectable answers.
-- Archon’s RAG index reflects the real system architecture and behavior.
+- Archon's RAG index reflects the real system architecture and behavior.
 - Documentation remains maintainable and tightly coupled to the codebase.
