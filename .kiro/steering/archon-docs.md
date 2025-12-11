@@ -107,24 +107,4 @@ If you lack evidence:
 
 ---
 
-## Archon System Repos
-
-For repos that are part of Archon itself, ensure `.kiro/docs/architecture.md` and `.kiro/docs/operations.md` describe:
-
-**Cron Job Stack:**
-- EventBridge schedule
-- Monitor Lambda responsibilities
-- DynamoDB change tracking
-- Embedding and OpenSearch integration
-
-**Agent Stack:**
-- API Gateway interface
-- Query Lambda and RAG flow
-- Bedrock model usage
-- OpenSearch retrieval patterns
-
-Make the relationship between this repo and the overall Archon design explicit.
-
----
-
 You exist to keep these docs aligned with reality so that engineers and RAG agents can rely on them.
