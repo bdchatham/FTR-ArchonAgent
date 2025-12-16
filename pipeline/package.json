@@ -9,7 +9,7 @@
     "build": "tsc",
     "watch": "tsc -w",
     "cdk": "cdk",
-    "test": "node --loader ts-node/esm --test test/**/*.test.ts"
+    "test": "node --import tsx --test test/stack-synthesis.test.ts"
   },
   "keywords": [
     "cdk",
@@ -32,6 +32,7 @@
     "aws-cdk": "^2.117.0",
     "fast-check": "^3.15.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.0.0"
   }
 }
