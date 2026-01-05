@@ -35,7 +35,7 @@ A test is considered **property-based** if it meets one or more of the following
 - Uses QuickCheck-style, fuzzing, or generator-based frameworks
 - Is designed to find edge cases rather than validate a single scenario
 
-If a test *could reasonably be described as asserting a property*, it belongs in `kiro/tests/`.
+If a test *could reasonably be described as asserting a property*, it belongs in `kiro/{current-spect}/tests/`.
 
 ---
 
@@ -57,19 +57,19 @@ Those tests may continue to live in their existing, conventional locations.
 When working with tests, you MUST enforce the following:
 
 1. **Creation**
-   - Any newly created property-based test MUST be placed in `kiro/tests/`
+   - Any newly created property-based test MUST be placed in `kiro/{current-spect}/tests/`
    - Property-based tests MUST NOT be placed alongside implementation code
 
 2. **Modification**
-   - When editing an existing property-based test, verify it is in `kiro/tests/`
+   - When editing an existing property-based test, verify it is in `kiro/{current-spect}/tests/`
    - If it is not, move it and update imports or references accordingly
 
 3. **Refactoring**
-   - If a test evolves from example-based to property-based, it MUST be moved into `kiro/tests/`
-   - If a test is ambiguous, default to treating it as property-based and place it in `kiro/tests/`
+   - If a test evolves from example-based to property-based, it MUST be moved into `kiro/{current-spect}/tests/`
+   - If a test is ambiguous, default to treating it as property-based and place it in `kiro/{current-spect}/tests/`
 
 4. **Discovery**
-   - If you encounter a property-based test outside `kiro/tests/`, you SHOULD flag it and recommend relocation
+   - If you encounter a property-based test outside `kiro/{current-spect}/tests/`, you SHOULD flag it and recommend relocation
 
 ---
 
@@ -92,4 +92,4 @@ This structure is intentional and must be preserved.
 - Do not co-locate property-based tests with implementation code
 - Do not create alternative directories for generative or fuzz tests
 
-If a test checks properties, **it goes in `kiro/tests/` — no exceptions**.
+If a test checks properties, **it goes in `kiro/{current-spect}/tests/` — no exceptions**.
