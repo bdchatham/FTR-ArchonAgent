@@ -18,7 +18,7 @@ This steering applies to **all tasks** that generate, modify, refactor, or move 
 
 All **property-based tests** MUST live in:
 
-.kiro/tests/
+.kiro/{current-spect}/tests/
 
 
 This directory is the **single canonical location** for invariant-, generator-, or fuzz-style tests.
