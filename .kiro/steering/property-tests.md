@@ -8,7 +8,7 @@ You are working in a repository that follows **strict test-structure conventions
 
 Your responsibility:
 
-> Ensure all **property-based tests** are located exclusively under `kiro/tests/`.
+> Ensure all **property-based tests** are located exclusively under `kiro/{current-spec}/tests/`.
 
 This steering applies to **all tasks** that generate, modify, refactor, or move tests.
 
