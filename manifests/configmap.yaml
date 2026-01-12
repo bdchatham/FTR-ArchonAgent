@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: archon-config
+data:
+  vector_db_url: "http://qdrant:6333"
+  tracker_db_url: "postgresql://archon:password@postgres:5432/archon"
+  vllm_base_url: "http://vllm:8000"
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  llm_model: "microsoft/DialoGPT-medium"
+  retrieval_k: "5"
+  max_tokens: "2048"
+  temperature: "0.7"
+  chunk_size: "1000"
+  chunk_overlap: "200"
+  repositories: |
+    [
+      {
+        "url": "https://github.com/bdchatham/ArchonAgent",
+        "branch": "main",
+        "paths": [".kiro/docs"]
+      },
+      {
+        "url": "https://github.com/bdchatham/ArbiterPipelineInfrastructure",
+        "branch": "main",
+        "paths": [".kiro/docs"]
+      }
+    ]

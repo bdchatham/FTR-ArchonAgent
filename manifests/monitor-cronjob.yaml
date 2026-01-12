@@ -1,0 +1,67 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: archon-monitor
+  labels:
+    app: archon-monitor
+spec:
+  schedule: "*/15 * * * *"  # Every 15 minutes
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: archon-monitor
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: monitor
+            image: registry.homelab.local/archon-monitor:latest
+            env:
+            - name: VECTOR_DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: archon-config
+                  key: vector_db_url
+            - name: TRACKER_DB_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: archon-config
+                  key: tracker_db_url
+            - name: VLLM_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: archon-config
+                  key: vllm_base_url
+            - name: EMBEDDING_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: archon-config
+                  key: embedding_model
+            - name: CHUNK_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: archon-config
+                  key: chunk_size
+            - name: CHUNK_OVERLAP
+              valueFrom:
+                configMapKeyRef:
+                  name: archon-config
+                  key: chunk_overlap
+            - name: REPOSITORIES
+              valueFrom:
+                configMapKeyRef:
+                  name: archon-config
+                  key: repositories
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: archon-secrets
+                  key: github_token
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "100m"
+              limits:
+                memory: "512Mi"

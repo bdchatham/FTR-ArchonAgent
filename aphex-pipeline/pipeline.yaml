@@ -1,0 +1,86 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: archon-pipeline
+spec:
+  params:
+    - name: git-url
+      type: string
+      description: Git repository URL
+    - name: git-revision
+      type: string
+      description: Git revision to build
+      default: main
+  workspaces:
+    - name: source
+      description: Source code workspace
+  tasks:
+    - name: clone-repo
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+      workspaces:
+        - name: output
+          workspace: source
+    
+    - name: run-tests
+      taskRef:
+        name: python-test
+      runAfter:
+        - clone-repo
+      params:
+        - name: test-command
+          value: "pytest --cov=archon --cov-report=term"
+      workspaces:
+        - name: source
+          workspace: source
+    
+    - name: build-query-image
+      taskRef:
+        name: buildah-build
+      runAfter:
+        - run-tests
+      params:
+        - name: IMAGE
+          value: "registry.homelab.local/archon-query:$(params.git-revision)"
+        - name: DOCKERFILE
+          value: "./docker/query.Dockerfile"
+        - name: CONTEXT
+          value: "."
+      workspaces:
+        - name: source
+          workspace: source
+    
+    - name: build-monitor-image
+      taskRef:
+        name: buildah-build
+      runAfter:
+        - run-tests
+      params:
+        - name: IMAGE
+          value: "registry.homelab.local/archon-monitor:$(params.git-revision)"
+        - name: DOCKERFILE
+          value: "./docker/monitor.Dockerfile"
+        - name: CONTEXT
+          value: "."
+      workspaces:
+        - name: source
+          workspace: source
+    
+    - name: deploy-manifests
+      taskRef:
+        name: kubectl-apply
+      runAfter:
+        - build-query-image
+        - build-monitor-image
+      params:
+        - name: manifest-dir
+          value: "./manifests"
+      workspaces:
+        - name: source
+          workspace: source
