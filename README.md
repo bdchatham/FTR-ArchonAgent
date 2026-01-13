@@ -11,7 +11,7 @@ Archon consists of two independent systems:
 1. **Document Monitor (Cron Job)** - Asynchronously monitors configured GitHub repositories for `.kiro/` documentation changes, generates embeddings, and populates a vector database
 2. **Query Agent (API)** - Processes natural language queries using RAG to retrieve relevant documentation and generate contextual answers with source references
 
-<!-- Test webhook trigger -->
+<!-- Test webhook trigger 2 -->
 
 ## Architecture
 
