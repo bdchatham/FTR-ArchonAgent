@@ -14,11 +14,11 @@ This file defines how you should behave when editing code or documentation in th
 
 The human owner should fill this section out once.
 
-- **Service name:** `<SERVICE_NAME>`
+- **Service name:** `ArchonAgent`
 - **High-level purpose:**  
-  `<One–two sentences on what this service does in the broader system.>`
-- **Type:** `<service | library | infra-only | monorepo-package | other>`
-- **Primary runtime:** `<e.g. Python Lambda, Node.js service, Go binary, etc.>`
+  `Archon agent implementation with Python modules for monitoring GitHub repositories, ingesting documentation, and providing RAG-based query capabilities.`
+- **Type:** `service`
+- **Primary runtime:** `Python containerized service`
 
 When documenting, focus on this service's role in the overall system rather than generic technology explanations.
 

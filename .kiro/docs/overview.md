@@ -2,7 +2,7 @@
 
 ## Purpose
 
-[Describe the high-level purpose of this repository]
+ArchonAgent is a Python-based RAG (Retrieval-Augmented Generation) system that monitors GitHub repositories for documentation changes and provides intelligent query capabilities. It consists of monitoring, ingestion, storage, and query components that work together to maintain an up-to-date knowledge base of system documentation.
 
 ## Archon Integration
 
@@ -10,18 +10,28 @@ This repository is ingested by the **Archon** RAG system, which reads all Markdo
 
 Documentation in this repository follows the Archon documentation contract defined in `CLAUDE.md` at the repo root.
 
-## Quick Start
+## Key Components
 
-[Add quick start instructions]
+- **Monitor Module** (`archon/monitor/`) - GitHub repository monitoring and workflow tracking
+- **Ingestion Module** (`archon/ingestion/`) - Document processing and embedding pipeline  
+- **Storage Module** (`archon/storage/`) - Vector database and change tracking
+- **Query Module** (`archon/query/`) - RAG-based query processing and API server
+- **Common Module** (`archon/common/`) - Shared configuration and utilities
 
-## Key Concepts
+## Deployment
 
-[List and briefly explain key concepts]
+The service is designed to run in Kubernetes with:
+- Containerized Python services (Docker configurations in `docker/`)
+- Kubernetes manifests for deployment (`manifests/`)
+- Tekton pipeline integration (`aphex-pipeline/`)
 
 ## Related Repositories
 
-[List related repositories and their relationships]
+- **ArbiterPipelineInfrastructure** - Platform infrastructure and GitOps configuration
+- **AphexCLI** - Command-line tool for pipeline and organization management
 
 **Source**
-- `CLAUDE.md`
-- `.kiro/steering/archon-docs.md`
+- `archon/` directory structure
+- `docker/` containerization configs  
+- `manifests/` Kubernetes deployment specs
+- `aphex-pipeline/pipeline.yaml`
