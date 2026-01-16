@@ -1,0 +1,18 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: archon-agent-argocd-deployer
+  namespace: argocd
+  labels:
+    app: archon-agent
+    component: deployment
+    platform.arbiter.io/pipeline: archon-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: argocd-application-deployer
+subjects:
+  - kind: ServiceAccount
+    name: pipeline-runner
+    namespace: archon-agent
+
