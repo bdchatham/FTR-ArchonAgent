@@ -31,7 +31,7 @@ kubectl describe pipeline archon-pipeline -n archon-ci
 ```bash
 # Platform operator applies RepoBinding
 kubectl apply -f - <<EOF
-apiVersion: arbiter.io/v1alpha1
+apiVersion: aphex/v1alpha1
 kind: RepoBinding
 metadata:
   name: archon-binding

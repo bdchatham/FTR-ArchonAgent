@@ -6,7 +6,7 @@ metadata:
   labels:
     app: archon-agent
     component: deployment
-    platform.arbiter.io/pipeline: archon-agent
+    platform.aphex/pipeline: archon-agent
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
