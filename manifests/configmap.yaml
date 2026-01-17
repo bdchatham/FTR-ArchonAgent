@@ -21,7 +21,7 @@ data:
         "paths": [".kiro/docs"]
       },
       {
-        "url": "https://github.com/bdchatham/ArbiterPipelineInfrastructure",
+        "url": "https://github.com/bdchatham/AphexPlatformInfrastructure",
         "branch": "main",
         "paths": [".kiro/docs"]
       }

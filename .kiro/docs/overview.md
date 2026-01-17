@@ -27,7 +27,7 @@ The service is designed to run in Kubernetes with:
 
 ## Related Repositories
 
-- **ArbiterPipelineInfrastructure** - Platform infrastructure and GitOps configuration
+- **AphexPlatformInfrastructure** - Platform infrastructure and GitOps configuration
 - **AphexCLI** - Command-line tool for pipeline and organization management
 
 **Source**
