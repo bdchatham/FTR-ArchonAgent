@@ -5,9 +5,11 @@ metadata:
 data:
   vector_db_url: "http://qdrant:6333"
   tracker_db_url: "postgresql://archon:password@postgres:5432/archon"
-  vllm_base_url: "http://vllm:8000"
-  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
-  llm_model: "microsoft/DialoGPT-medium"
+  # Model server in archon-system namespace (cross-namespace access)
+  vllm_base_url: "http://vllm.archon-system.svc.cluster.local:8000"
+  # Model names must match vllm-config in model-server
+  embedding_model: "BAAI/bge-base-en-v1.5"
+  llm_model: "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4"
   retrieval_k: "5"
   max_tokens: "2048"
   temperature: "0.7"

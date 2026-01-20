@@ -1,0 +1,59 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: deploy-model-server
+  namespace: archon-agent
+  labels:
+    app: archon-agent
+    component: model-server
+spec:
+  description: >-
+    Deploys the vLLM model server infrastructure via ArgoCD.
+    This pipeline should be run BEFORE deploy-knowledge-base to ensure
+    the model server is available for embedding and inference requests.
+
+  params:
+    - name: git-url
+      type: string
+      description: Git repository URL containing the manifests
+      default: https://github.com/bdchatham/ArchonAgent
+    - name: git-revision
+      type: string
+      description: Git revision (branch, tag, or commit SHA)
+      default: main
+    - name: manifest-path
+      type: string
+      description: Path within the repository containing model server manifests
+      default: manifests/model-server
+    - name: app-name
+      type: string
+      description: Name of the ArgoCD Application
+      default: archon-model-server
+    - name: target-namespace
+      type: string
+      description: Target namespace for model server deployment
+      default: archon-system
+
+  tasks:
+    - name: deploy-to-argocd
+      taskRef:
+        name: argocd-deployment
+      params:
+        - name: app-name
+          value: $(params.app-name)
+        - name: repo-url
+          value: $(params.git-url)
+        - name: repo-revision
+          value: $(params.git-revision)
+        - name: manifest-path
+          value: $(params.manifest-path)
+        - name: target-namespace
+          value: $(params.target-namespace)
+        - name: auto-sync
+          value: "true"
+        - name: prune
+          value: "true"
+        - name: self-heal
+          value: "true"
+        - name: create-namespace
+          value: "true"
