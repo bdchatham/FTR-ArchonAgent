@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: archon-system
+  labels:
+    app.kubernetes.io/name: archon-system
+    app.kubernetes.io/part-of: archon
+    app.kubernetes.io/component: model-server

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: archon-system
+  labels:
+    app.kubernetes.io/name: default-limits
+    app.kubernetes.io/part-of: archon
+    app.kubernetes.io/component: model-server
+spec:
+  limits:
+    - default:
+        memory: "512Mi"
+        cpu: "500m"
+      defaultRequest:
+        memory: "256Mi"
+        cpu: "100m"
+      type: Container
