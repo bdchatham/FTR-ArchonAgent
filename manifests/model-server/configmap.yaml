@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vllm-config
+  namespace: archon-system
+  labels:
+    app.kubernetes.io/name: vllm-config
+    app.kubernetes.io/part-of: archon
+    app.kubernetes.io/component: model-server
+data:
+  # LLM model - Qwen2.5-Coder 14B with GPTQ-Int4 quantization
+  # Optimized for code understanding, Apache 2.0 license
+  llm_model: "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4"
+  
+  # Embedding model - code-optimized for technical content
+  embedding_model: "BAAI/bge-base-en-v1.5"
+  
+  # vLLM configuration for 16GB VRAM (RTX 5070)
+  gpu_memory_utilization: "0.90"
+  max_model_len: "8192"
+  tensor_parallel_size: "1"
+  quantization: "gptq"
