@@ -12,9 +12,6 @@ data:
   # Optimized for code understanding, Apache 2.0 license
   llm_model: "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4"
   
-  # Embedding model - code-optimized for technical content
-  embedding_model: "BAAI/bge-base-en-v1.5"
-  
   # vLLM configuration for 16GB VRAM (RTX 5070)
   gpu_memory_utilization: "0.90"
   max_model_len: "8192"

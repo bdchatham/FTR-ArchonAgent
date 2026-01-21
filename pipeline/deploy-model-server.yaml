@@ -2,15 +2,15 @@ apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: deploy-model-server
-  namespace: archon-agent
+  namespace: pipeline-system
   labels:
     app: archon-agent
     component: model-server
 spec:
   description: >-
     Deploys the vLLM model server infrastructure via ArgoCD.
-    This pipeline should be run BEFORE deploy-knowledge-base to ensure
-    the model server is available for embedding and inference requests.
+    The model server provides OpenAI-compatible LLM inference endpoints.
+    Can be deployed independently of the Knowledge Base.
 
   params:
     - name: git-url

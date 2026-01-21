@@ -15,6 +15,7 @@ resources:
   # Workloads
   - deployment.yaml
   - service.yaml
+  - ingress.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: archon

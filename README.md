@@ -1,30 +1,36 @@
 # Archon Agent
 
-RAG-powered knowledge base system for querying documentation across repositories.
+GPU-accelerated vLLM model server providing embeddings and inference for the Archon RAG system.
 
 ## Architecture
 
-Archon consists of two main components:
+Archon is split into two separate deployments:
 
-1. **Model Server** (`manifests/model-server/`) - GPU-accelerated vLLM inference
-2. **Knowledge Base** (`manifests/knowledge-base/`) - RAG query and ingestion services
+1. **Agent (this repo)** - vLLM model server for embeddings and inference
+2. **Knowledge Base** ([ArchonKnowledgeBaseInfrastructure](https://github.com/bdchatham/ArchonKnowledgeBaseInfrastructure)) - RAG query and ingestion services
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     archon-system namespace                  │
-│  ┌─────────────┐                                            │
-│  │    vLLM     │◄── GPU inference (embeddings + LLM)        │
-│  │  :8000      │                                            │
-│  └─────────────┘                                            │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │                    vLLM Model Server                    ││
+│  │                                                         ││
+│  │  • /v1/embeddings - Vector embeddings (BGE)            ││
+│  │  • /v1/completions - Text generation (Qwen)            ││
+│  │  • /v1/chat/completions - Chat interface               ││
+│  └─────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────┘
+                              ▲
+                              │ embeddings + inference
                               │
-                              ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     archon-kb namespace                      │
+│                archon-knowledge-base namespace               │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
 │  │   Query     │    │   Monitor   │    │   Qdrant    │     │
 │  │  Service    │    │  (CronJob)  │    │  (Vector)   │     │
 │  └─────────────┘    └─────────────┘    └─────────────┘     │
+│                                                             │
+│  (Deployed from ArchonKnowledgeBaseInfrastructure repo)     │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -37,19 +43,23 @@ Archon consists of two main components:
 - ArgoCD installed
 - Tekton Pipelines installed
 
-### Pipeline Execution Order
-
-**Important**: Deploy in this exact order.
+### Deploy Model Server
 
 ```bash
-# 1. Deploy model server (GPU infrastructure)
-kubectl create -f pipeline/deploy-model-server.yaml -n archon-agent
+# Deploy model server (GPU infrastructure)
+kubectl create -f - <<EOF
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: deploy-model-server-
+  namespace: pipeline-system
+spec:
+  pipelineRef:
+    name: deploy-model-server
+EOF
 
-# 2. Wait for vLLM to be ready (15-30 min on first run)
+# Wait for vLLM to be ready (15-30 min on first run)
 kubectl get pods -n archon-system -w
-
-# 3. Deploy knowledge base components
-kubectl create -f pipeline/deploy-pipeline.yaml -n archon-agent
 ```
 
 ### Verify Deployment
@@ -58,9 +68,6 @@ kubectl create -f pipeline/deploy-pipeline.yaml -n archon-agent
 # Check model server
 kubectl get pods -n archon-system
 curl http://vllm.archon-system.svc.cluster.local:8000/health
-
-# Check knowledge base
-kubectl get pods -n archon-kb
 ```
 
 ## GPU Troubleshooting
@@ -99,7 +106,10 @@ Edit `manifests/model-server/configmap.yaml`:
 | File | Purpose |
 |------|---------|
 | `manifests/model-server/configmap.yaml` | vLLM model and GPU settings |
-| `manifests/configmap.yaml` | Archon service configuration |
+
+## Related Repositories
+
+- [ArchonKnowledgeBaseInfrastructure](https://github.com/bdchatham/ArchonKnowledgeBaseInfrastructure) - Knowledge base deployment
 
 ## Development
 
