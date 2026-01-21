@@ -36,7 +36,14 @@ spec:
     
     - name: run-tests
       taskRef:
-        name: python-test
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: python-test
+          - name: namespace
+            value: tekton-pipelines
       runAfter:
         - clone-repo
       params:
@@ -48,7 +55,14 @@ spec:
     
     - name: build-query-image
       taskRef:
-        name: buildah-build
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: buildah-build
+          - name: namespace
+            value: tekton-pipelines
       runAfter:
         - run-tests
       params:
@@ -64,7 +78,14 @@ spec:
     
     - name: build-monitor-image
       taskRef:
-        name: buildah-build
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: buildah-build
+          - name: namespace
+            value: tekton-pipelines
       runAfter:
         - run-tests
       params:
@@ -80,7 +101,14 @@ spec:
     
     - name: deploy-manifests
       taskRef:
-        name: kubectl-apply
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: kubectl-apply
+          - name: namespace
+            value: tekton-pipelines
       runAfter:
         - build-query-image
         - build-monitor-image
