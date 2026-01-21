@@ -2,50 +2,16 @@
 
 ## Overview
 
-The vLLM model server exposes OpenAI-compatible REST endpoints for LLM inference. Clients can use standard OpenAI client libraries or direct HTTP requests.
+ArchonAgent exposes an OpenAI-compatible REST API for chat completions. The RAG orchestrator transparently augments requests with context from the Knowledge Base - clients use the standard OpenAI format and receive context-aware responses.
 
 ## Base URLs
 
-- **Internal**: `http://vllm.archon-system.svc.cluster.local:8000`
-- **External**: `http://archon.home.local` (via Ingress)
+- **RAG-enabled (recommended)**: `http://archon.home.local`
+- **Direct vLLM (bypass RAG)**: `http://vllm.home.local`
+- **Internal orchestrator**: `http://archon-rag.archon-system.svc.cluster.local:8080`
+- **Internal vLLM**: `http://vllm.archon-system.svc.cluster.local:8000`
 
 ## Endpoints
-
-### Health Check
-
-```
-GET /health
-```
-
-Returns 200 when the server is healthy and ready to serve requests.
-
-**Response**:
-```json
-{}
-```
-
-### List Models
-
-```
-GET /v1/models
-```
-
-Lists available models loaded in the server.
-
-**Response**:
-```json
-{
-  "object": "list",
-  "data": [
-    {
-      "id": "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4",
-      "object": "model",
-      "created": 1234567890,
-      "owned_by": "vllm"
-    }
-  ]
-}
-```
 
 ### Chat Completions
 
@@ -53,7 +19,7 @@ Lists available models loaded in the server.
 POST /v1/chat/completions
 ```
 
-Generate chat completions using the loaded LLM.
+Generate chat completions with automatic RAG augmentation.
 
 **Request Body**:
 ```json
@@ -61,7 +27,7 @@ Generate chat completions using the loaded LLM.
   "model": "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4",
   "messages": [
     {"role": "system", "content": "You are a helpful coding assistant."},
-    {"role": "user", "content": "Write a Python function to calculate fibonacci numbers."}
+    {"role": "user", "content": "How does the deployment pipeline work?"}
   ],
   "max_tokens": 1024,
   "temperature": 0.7,
@@ -81,6 +47,13 @@ Generate chat completions using the loaded LLM.
 | stream | boolean | No | false | Enable streaming response |
 | stop | string/array | No | null | Stop sequences |
 
+**What happens behind the scenes**:
+1. Orchestrator extracts "How does the deployment pipeline work?" as the query
+2. Calls Knowledge Base to retrieve relevant documentation chunks
+3. Augments the system message with retrieved context
+4. Forwards to vLLM for inference
+5. Returns the response unchanged
+
 **Response** (non-streaming):
 ```json
 {
@@ -93,15 +66,15 @@ Generate chat completions using the loaded LLM.
       "index": 0,
       "message": {
         "role": "assistant",
-        "content": "def fibonacci(n):\n    if n <= 1:\n        return n\n    return fibonacci(n-1) + fibonacci(n-2)"
+        "content": "Based on the documentation, the deployment pipeline uses ArgoCD..."
       },
       "finish_reason": "stop"
     }
   ],
   "usage": {
-    "prompt_tokens": 25,
-    "completion_tokens": 42,
-    "total_tokens": 67
+    "prompt_tokens": 150,
+    "completion_tokens": 200,
+    "total_tokens": 350
   }
 }
 ```
@@ -110,39 +83,93 @@ Generate chat completions using the loaded LLM.
 
 Server-Sent Events format:
 ```
-data: {"id":"cmpl-abc123","object":"chat.completion.chunk","choices":[{"delta":{"content":"def"},"index":0}]}
+data: {"id":"cmpl-abc123","object":"chat.completion.chunk","choices":[{"delta":{"content":"Based"},"index":0}]}
 
-data: {"id":"cmpl-abc123","object":"chat.completion.chunk","choices":[{"delta":{"content":" fibonacci"},"index":0}]}
+data: {"id":"cmpl-abc123","object":"chat.completion.chunk","choices":[{"delta":{"content":" on"},"index":0}]}
 
 data: [DONE]
 ```
 
-## Authentication
+### List Models
 
-No authentication is required for internal cluster access. For external access via Ingress, configure authentication at the Ingress level if needed.
+```
+GET /v1/models
+```
 
-## Error Handling
+Lists available models (proxied to vLLM).
 
-### Error Response Format
-
+**Response**:
 ```json
 {
-  "error": {
-    "message": "Error description",
-    "type": "error_type",
-    "code": "error_code"
-  }
+  "object": "list",
+  "data": [
+    {
+      "id": "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4",
+      "object": "model",
+      "created": 1234567890,
+      "owned_by": "vllm"
+    }
+  ]
 }
 ```
 
-### Common Error Codes
+### Health Check
 
-| HTTP Status | Error Type | Description |
-|-------------|------------|-------------|
-| 400 | invalid_request_error | Malformed request body |
-| 404 | model_not_found | Requested model not loaded |
-| 503 | service_unavailable | Model server not ready |
-| 500 | internal_error | Server error |
+```
+GET /health
+```
+
+Liveness check - returns 200 when orchestrator is running.
+
+**Response**:
+```json
+{"status": "healthy"}
+```
+
+### Readiness Check
+
+```
+GET /ready
+```
+
+Readiness check - verifies connectivity to KB and vLLM.
+
+**Response** (healthy):
+```json
+{
+  "status": "ready",
+  "knowledge_base": "healthy",
+  "vllm": "healthy",
+  "rag_enabled": true
+}
+```
+
+**Response** (degraded - KB unavailable):
+```json
+{
+  "status": "degraded",
+  "knowledge_base": "unavailable",
+  "vllm": "healthy",
+  "rag_enabled": false
+}
+```
+
+**Response** (unhealthy - vLLM unavailable):
+```
+HTTP 503 Service Unavailable
+{"detail": "vLLM unavailable: unavailable"}
+```
+
+## RAG Configuration
+
+The orchestrator behavior is controlled by environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RAG_ENABLED` | true | Enable/disable RAG augmentation |
+| `RAG_CONTEXT_CHUNKS` | 5 | Number of chunks to retrieve |
+| `RAG_SIMILARITY_THRESHOLD` | 0.5 | Minimum similarity score (0-1) |
+| `RAG_RETRIEVAL_TIMEOUT` | 5.0 | Timeout for KB retrieval (seconds) |
 
 ## Integration Examples
 
@@ -152,14 +179,14 @@ No authentication is required for internal cluster access. For external access v
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://vllm.archon-system.svc.cluster.local:8000/v1",
-    api_key="not-needed"  # vLLM doesn't require auth
+    base_url="http://archon.home.local/v1",
+    api_key="not-needed"
 )
 
 response = client.chat.completions.create(
     model="Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4",
     messages=[
-        {"role": "user", "content": "Explain async/await in Python"}
+        {"role": "user", "content": "How does the deployment pipeline work?"}
     ],
     max_tokens=512
 )
@@ -170,7 +197,32 @@ print(response.choices[0].message.content)
 ### curl
 
 ```bash
-curl -X POST http://vllm.archon-system.svc.cluster.local:8000/v1/chat/completions \
+curl -X POST http://archon.home.local/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4",
+    "messages": [{"role": "user", "content": "Explain the architecture"}],
+    "max_tokens": 512
+  }'
+```
+
+### Streaming with curl
+
+```bash
+curl -X POST http://archon.home.local/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4",
+    "messages": [{"role": "user", "content": "Write a deployment script"}],
+    "max_tokens": 512,
+    "stream": true
+  }'
+```
+
+### Bypass RAG (direct vLLM)
+
+```bash
+curl -X POST http://vllm.home.local/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4",
@@ -179,20 +231,17 @@ curl -X POST http://vllm.archon-system.svc.cluster.local:8000/v1/chat/completion
   }'
 ```
 
-### Streaming with curl
+## Error Handling
 
-```bash
-curl -X POST http://vllm.archon-system.svc.cluster.local:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4",
-    "messages": [{"role": "user", "content": "Write a haiku about coding"}],
-    "max_tokens": 100,
-    "stream": true
-  }'
-```
+| HTTP Status | Condition | Response |
+|-------------|-----------|----------|
+| 400 | Invalid request | `{"detail": "..."}` |
+| 503 | vLLM unavailable | `{"detail": "vLLM service unavailable"}` |
+| 503 | Readiness check failed | `{"detail": "vLLM unavailable: ..."}` |
+
+Note: KB unavailability does NOT cause errors - the orchestrator degrades gracefully and forwards requests without augmentation.
 
 **Source**
-- `manifests/model-server/service.yaml`
-- `manifests/model-server/ingress.yaml`
-- vLLM OpenAI-compatible API documentation
+- `src/orchestrator/main.py` - API implementation
+- `src/orchestrator/models.py` - Request/response models
+- `manifests/orchestrator/configmap.yaml` - Configuration

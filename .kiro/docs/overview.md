@@ -2,9 +2,12 @@
 
 ## Purpose
 
-ArchonAgent is a GPU-accelerated vLLM model server that provides OpenAI-compatible LLM inference for the Archon RAG system. It serves as the compute backbone for generating responses to user queries using the Qwen2.5-Coder-14B-Instruct model.
+ArchonAgent provides the inference layer for the Archon RAG system:
 
-The Agent focuses purely on LLM inference. Embedding generation is handled by the Knowledge Base (ArchonKnowledgeBaseInfrastructure), which has its own self-contained Embedding Service.
+1. **RAG Orchestrator** - Transparent proxy that augments chat requests with context from the Knowledge Base
+2. **vLLM Model Server** - GPU-accelerated LLM inference using Qwen2.5-Coder-14B
+
+Clients interact with a standard OpenAI `/v1/chat/completions` API. The orchestrator automatically retrieves relevant context and augments prompts - clients receive better answers without knowing RAG is happening.
 
 ## Archon Integration
 
@@ -14,17 +17,17 @@ Documentation in this repository follows the Archon documentation contract defin
 
 ## Key Components
 
+- **RAG Orchestrator** (`src/orchestrator/`) - FastAPI service using LangChain for RAG logic
 - **vLLM Model Server** - GPU-accelerated inference engine with OpenAI-compatible API
-- **ConfigMap** - Externalized model configuration (model name, VRAM utilization, context length)
-- **PersistentVolumeClaim** - Model cache storage to avoid re-downloading on restarts
+- **ConfigMap** - Externalized configuration for both services
 - **Tekton Pipeline** - GitOps deployment via ArgoCD
 
 ## Deployment
 
-The service runs in Kubernetes with:
-- NVIDIA GPU access via `nvidia` RuntimeClass
-- Kubernetes manifests in `manifests/model-server/`
-- Tekton pipeline in `pipeline/`
+The services run in Kubernetes with:
+- RAG Orchestrator as a lightweight Python service
+- vLLM with NVIDIA GPU access via `nvidia` RuntimeClass
+- Kubernetes manifests in `manifests/orchestrator/` and `manifests/model-server/`
 - ArgoCD Application for GitOps sync
 
 ## Related Repositories
@@ -34,6 +37,7 @@ The service runs in Kubernetes with:
 - **AphexPipelineResources** - Reusable Tekton tasks including `argocd-deployment`
 
 **Source**
-- `manifests/model-server/` - Kubernetes deployment manifests
-- `pipeline/` - Tekton pipeline definitions
+- `src/orchestrator/` - RAG orchestrator Python code
+- `manifests/orchestrator/` - Orchestrator Kubernetes manifests
+- `manifests/model-server/` - vLLM Kubernetes manifests
 - `CLAUDE.md` - Documentation contract

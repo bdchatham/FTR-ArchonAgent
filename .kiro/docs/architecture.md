@@ -2,113 +2,129 @@
 
 ## System Design
 
-ArchonAgent deploys a single vLLM model server running Qwen2.5-Coder-14B-Instruct-GPTQ-Int4 on an NVIDIA RTX 5070 GPU (16GB VRAM). The server provides OpenAI-compatible endpoints for LLM inference.
+ArchonAgent provides a transparent RAG proxy in front of vLLM. Clients send standard OpenAI chat completion requests; the orchestrator retrieves context from the Knowledge Base, augments the prompt, and forwards to vLLM.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      archon-system namespace                │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │                   vLLM Deployment                    │   │
-│  │                                                      │   │
-│  │  ┌────────────────────────────────────────────────┐ │   │
-│  │  │              vllm/vllm-openai:v0.4.0           │ │   │
-│  │  │                                                │ │   │
-│  │  │  Model: Qwen2.5-Coder-14B-Instruct-GPTQ-Int4  │ │   │
-│  │  │  GPU: nvidia.com/gpu: 1                       │ │   │
-│  │  │  Port: 8000                                   │ │   │
-│  │  └────────────────────────────────────────────────┘ │   │
-│  │                         │                            │   │
-│  │                         ▼                            │   │
-│  │              ┌──────────────────┐                   │   │
-│  │              │   model-cache    │                   │   │
-│  │              │   PVC (50Gi)     │                   │   │
-│  │              └──────────────────┘                   │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                         │                                   │
-│                         ▼                                   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              vllm Service (ClusterIP)               │   │
-│  │              Port: 8000                              │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                         │                                   │
-│                         ▼                                   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │              vllm Ingress                            │   │
-│  │              Host: archon.home.local                 │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────┐                        ┌─────────────────────────────────────────────┐
+│  Client  │   /v1/chat/completions │              archon-system namespace        │
+│          │ ──────────────────────▶│                                             │
+└──────────┘   archon.home.local    │  ┌───────────────────────────────────────┐  │
+                                    │  │         RAG Orchestrator              │  │
+                                    │  │         (archon-rag:8080)             │  │
+                                    │  │                                       │  │
+                                    │  │  1. Extract query from messages       │  │
+                                    │  │  2. Retrieve context from KB ─────────┼──┼──┐
+                                    │  │  3. Augment prompt with context       │  │  │
+                                    │  │  4. Forward to vLLM ──────────────────┼──┼──┼──┐
+                                    │  │  5. Return response                   │  │  │  │
+                                    │  └───────────────────────────────────────┘  │  │  │
+                                    │                                             │  │  │
+                                    │  ┌───────────────────────────────────────┐  │  │  │
+                                    │  │              vLLM                     │◀─┼──┼──┘
+                                    │  │         (vllm:8000)                   │  │  │
+                                    │  │                                       │  │  │
+                                    │  │  Model: Qwen2.5-Coder-14B-GPTQ-Int4  │  │  │
+                                    │  │  GPU: nvidia.com/gpu: 1              │  │  │
+                                    │  └───────────────────────────────────────┘  │  │
+                                    └─────────────────────────────────────────────┘  │
+                                                                                     │
+                                    ┌─────────────────────────────────────────────┐  │
+                                    │       archon-knowledge-base namespace       │  │
+                                    │                                             │  │
+                                    │  ┌───────────────────────────────────────┐  │  │
+                                    │  │           Query Service               │◀─┼──┘
+                                    │  │         (query:8080)                  │  │
+                                    │  │         POST /v1/retrieve             │  │
+                                    │  └───────────────────────────────────────┘  │
+                                    └─────────────────────────────────────────────┘
 ```
 
 ## Components
 
+### RAG Orchestrator
+
+Lightweight FastAPI service that coordinates retrieval and inference:
+
+- **Image**: `ghcr.io/bdchatham/archon-rag-orchestrator:latest`
+- **Port**: 8080
+- **Resources**: 256-512Mi memory, 100-500m CPU
+- **Framework**: FastAPI + LangChain
+
+Key responsibilities:
+1. Parse incoming OpenAI chat completion requests
+2. Extract user query from conversation
+3. Call Knowledge Base to retrieve relevant context
+4. Augment system prompt with retrieved context
+5. Forward augmented request to vLLM
+6. Return response in OpenAI format
+
 ### vLLM Model Server
 
-The core inference engine using vLLM's OpenAI-compatible server:
+GPU-accelerated inference engine:
 
 - **Image**: `vllm/vllm-openai:v0.4.0`
 - **RuntimeClass**: `nvidia` for GPU access
 - **Resources**: 16-24Gi memory, 4-8 CPU cores, 1 GPU
-- **Health probes**: Startup (30min timeout), liveness, readiness via `/health`
+- **Model**: Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
 
-### ConfigMap (vllm-config)
+### Configuration
 
-Externalized configuration for model selection and VRAM optimization:
+**Orchestrator ConfigMap** (`archon-rag-config`):
+- `KNOWLEDGE_BASE_URL`: KB query service URL
+- `VLLM_URL`: vLLM service URL
+- `RAG_ENABLED`: Enable/disable RAG augmentation
+- `RAG_CONTEXT_CHUNKS`: Number of chunks to retrieve
+- `RAG_SIMILARITY_THRESHOLD`: Minimum similarity score
 
-- `llm_model`: Model identifier from HuggingFace
-- `gpu_memory_utilization`: VRAM usage fraction (0.90 default)
-- `max_model_len`: Maximum context length (8192 default)
-- `quantization`: Quantization method (gptq)
+**vLLM ConfigMap** (`vllm-config`):
+- `llm_model`: HuggingFace model identifier
+- `gpu_memory_utilization`: VRAM usage fraction
+- `max_model_len`: Maximum context length
 
-### PersistentVolumeClaim (model-cache)
+## Request Flow
 
-50Gi storage for HuggingFace model cache:
+1. **Client Request**: Standard OpenAI chat completion request arrives
+2. **Query Extraction**: Orchestrator extracts the last user message
+3. **Context Retrieval**: Orchestrator calls KB `/v1/retrieve` with the query
+4. **Filtering**: Chunks below similarity threshold are discarded
+5. **Prompt Augmentation**: Context is injected into system message
+6. **LLM Inference**: Augmented request forwarded to vLLM
+7. **Response**: vLLM response returned to client unchanged
 
-- Mounted at `/root/.cache/huggingface`
-- Persists models across pod restarts
-- First startup downloads models (~15-30 min)
-- Subsequent restarts use cache (~2 min)
+## Graceful Degradation
 
-### Service (vllm)
+The orchestrator degrades gracefully when dependencies are unavailable:
 
-ClusterIP service exposing the model server:
-
-- Internal DNS: `vllm.archon-system.svc.cluster.local`
-- Port: 8000
-
-### Ingress (vllm)
-
-External access via nginx ingress:
-
-- Host: `archon.home.local`
-- Extended timeouts for long inference requests
+| Scenario | Behavior |
+|----------|----------|
+| KB unreachable | Forward to vLLM without augmentation |
+| KB timeout (>5s) | Forward to vLLM without augmentation |
+| KB returns empty | Forward to vLLM without augmentation |
+| vLLM unreachable | Return 503 Service Unavailable |
 
 ## Technology Stack
 
+- **FastAPI**: Async web framework for orchestrator
+- **LangChain**: RAG chain construction and prompt management
 - **vLLM**: High-throughput LLM serving engine
-- **Qwen2.5-Coder-14B**: Code-optimized LLM with Apache 2.0 license
-- **GPTQ**: Post-training quantization for reduced VRAM usage
+- **Qwen2.5-Coder-14B**: Code-optimized LLM
 - **Kubernetes**: Container orchestration
 - **ArgoCD**: GitOps deployment
-- **Tekton**: CI/CD pipelines
 
 ## Dependencies
 
 ### Upstream Dependencies
 
-- **NVIDIA RuntimeClass**: Must exist before deployment (from AphexPlatformInfrastructure)
-- **NVIDIA Device Plugin**: Provides GPU scheduling
+- **ArchonKnowledgeBaseInfrastructure**: Provides `/v1/retrieve` for context retrieval
+- **NVIDIA RuntimeClass**: Required for vLLM GPU access
 - **nginx Ingress Controller**: For external access
-- **ArgoCD**: For GitOps deployment
-- **HuggingFace Hub**: Model downloads
 
 ### Downstream Dependencies
 
-- **ArchonKnowledgeBaseInfrastructure**: Uses vLLM for LLM inference (optional - KB can be deployed independently)
+None - this is the top of the inference stack.
 
 **Source**
-- `manifests/model-server/deployment.yaml`
-- `manifests/model-server/configmap.yaml`
-- `manifests/model-server/service.yaml`
-- `manifests/model-server/ingress.yaml`
-- `manifests/model-server/pvc.yaml`
+- `src/orchestrator/main.py` - Orchestrator FastAPI app
+- `src/orchestrator/rag_chain.py` - LangChain RAG logic
+- `manifests/orchestrator/` - Orchestrator Kubernetes manifests
+- `manifests/model-server/` - vLLM Kubernetes manifests

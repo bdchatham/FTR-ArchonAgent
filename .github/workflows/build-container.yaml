@@ -1,16 +1,20 @@
-name: Build and Push Container
+name: Build and Push Containers
 
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/orchestrator/**'
+      - 'Dockerfile.orchestrator'
+      - 'requirements-orchestrator.txt'
+      - '.github/workflows/build-container.yaml'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
+  build-orchestrator:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -27,19 +31,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Extract metadata
+      - name: Extract metadata for orchestrator
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/archon-rag-orchestrator
           tags: |
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
       
-      - name: Build and push image
+      - name: Build and push orchestrator image
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: Dockerfile.orchestrator
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

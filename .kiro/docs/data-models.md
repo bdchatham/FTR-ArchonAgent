@@ -2,11 +2,53 @@
 
 ## Overview
 
-ArchonAgent uses Kubernetes ConfigMaps for configuration and PersistentVolumeClaims for model storage. There are no application-level data models - the vLLM container handles all inference logic.
+ArchonAgent uses Kubernetes ConfigMaps for configuration. The orchestrator is stateless - it retrieves context from the Knowledge Base on each request.
 
-## ConfigMap: vllm-config
+## Orchestrator ConfigMap
 
-Externalized configuration for the vLLM model server.
+Configuration for the RAG orchestrator.
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: archon-rag-config
+  namespace: archon-system
+data:
+  KNOWLEDGE_BASE_URL: "http://query.archon-knowledge-base.svc.cluster.local:8080"
+  VLLM_URL: "http://vllm.archon-system.svc.cluster.local:8000"
+  RAG_ENABLED: "true"
+  RAG_CONTEXT_CHUNKS: "5"
+  RAG_SIMILARITY_THRESHOLD: "0.5"
+  RAG_RETRIEVAL_TIMEOUT: "5.0"
+```
+
+### Fields
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| KNOWLEDGE_BASE_URL | string | (see above) | KB query service URL |
+| VLLM_URL | string | (see above) | vLLM service URL |
+| RAG_ENABLED | bool | true | Enable RAG augmentation |
+| RAG_CONTEXT_CHUNKS | int | 5 | Number of chunks to retrieve |
+| RAG_SIMILARITY_THRESHOLD | float | 0.5 | Minimum similarity score (0-1) |
+| RAG_RETRIEVAL_TIMEOUT | float | 5.0 | KB retrieval timeout in seconds |
+
+### Tuning RAG_CONTEXT_CHUNKS
+
+- **5** (default): Good balance of context and prompt length
+- **3**: Less context, faster inference, lower token usage
+- **10**: More context, may exceed model context window
+
+### Tuning RAG_SIMILARITY_THRESHOLD
+
+- **0.5** (default): Include moderately relevant chunks
+- **0.7**: Only highly relevant chunks
+- **0.3**: Include loosely related chunks
+
+## vLLM ConfigMap
+
+Configuration for the vLLM model server.
 
 ```yaml
 apiVersion: v1
@@ -26,145 +68,119 @@ data:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| llm_model | string | Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4 | HuggingFace model identifier |
-| gpu_memory_utilization | string | 0.90 | Fraction of GPU VRAM to use (0.0-1.0) |
-| max_model_len | string | 8192 | Maximum context length in tokens |
-| tensor_parallel_size | string | 1 | Number of GPUs for tensor parallelism |
-| quantization | string | gptq | Quantization method (gptq, awq, none) |
+| llm_model | string | (see above) | HuggingFace model identifier |
+| gpu_memory_utilization | float | 0.90 | Fraction of GPU VRAM to use |
+| max_model_len | int | 8192 | Maximum context length in tokens |
+| tensor_parallel_size | int | 1 | GPUs for tensor parallelism |
+| quantization | string | gptq | Quantization method |
 
-### Model Selection Guidelines
+## Request/Response Models
 
-For 16GB VRAM (RTX 5070):
+### ChatCompletionRequest
 
-| Model | Size | Use Case |
-|-------|------|----------|
-| Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4 | ~10-12GB | Code understanding, architecture questions |
-| Qwen/Qwen2.5-Coder-7B-Instruct-GPTQ-Int4 | ~5-6GB | Lighter workloads, faster inference |
-
-### Tuning gpu_memory_utilization
-
-- **0.90** (default): Maximizes model capacity, may cause OOM under heavy load
-- **0.85**: Safer margin for concurrent requests
-- **0.80**: Conservative, good for stability testing
-
-### Tuning max_model_len
-
-- **8192** (default): Full context for most use cases
-- **4096**: Reduced memory, faster inference
-- **2048**: Minimal memory, suitable for short queries
-
-## ResourceQuota: gpu-quota
-
-Limits GPU allocation in the namespace.
-
-```yaml
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: gpu-quota
-  namespace: archon-system
-spec:
-  hard:
-    requests.nvidia.com/gpu: "1"
-    limits.nvidia.com/gpu: "1"
+```python
+class ChatCompletionRequest:
+    model: str                    # Model identifier
+    messages: list[ChatMessage]   # Conversation history
+    max_tokens: int | None        # Max tokens to generate
+    temperature: float = 1.0      # Sampling temperature
+    top_p: float = 1.0           # Nucleus sampling
+    stream: bool = False         # Enable streaming
+    stop: str | list[str] | None # Stop sequences
 ```
 
-### Fields
+### ChatMessage
 
-| Key | Value | Description |
-|-----|-------|-------------|
-| requests.nvidia.com/gpu | 1 | Maximum GPU requests in namespace |
-| limits.nvidia.com/gpu | 1 | Maximum GPU limits in namespace |
-
-## LimitRange: default-limits
-
-Default resource limits for containers without explicit limits.
-
-```yaml
-apiVersion: v1
-kind: LimitRange
-metadata:
-  name: default-limits
-  namespace: archon-system
-spec:
-  limits:
-    - default:
-        memory: "512Mi"
-        cpu: "500m"
-      defaultRequest:
-        memory: "256Mi"
-        cpu: "100m"
-      type: Container
+```python
+class ChatMessage:
+    role: str      # "system", "user", or "assistant"
+    content: str   # Message content
 ```
 
-Note: The vLLM deployment specifies explicit resource requests/limits, so these defaults apply only to other containers in the namespace.
+### RetrievalChunk
 
-## PersistentVolumeClaim: model-cache
+Retrieved from Knowledge Base:
 
-Storage for HuggingFace model cache.
-
-```yaml
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: model-cache
-  namespace: archon-system
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 50Gi
-  storageClassName: local-path
+```python
+class RetrievalChunk:
+    content: str       # Chunk text
+    source: str        # Source file path
+    chunk_index: int   # Position in source
+    score: float       # Similarity score (0-1)
 ```
 
-### Fields
+## Context Injection Format
 
-| Key | Value | Description |
-|-----|-------|-------------|
-| accessModes | ReadWriteOnce | Single-node read-write access |
-| storage | 50Gi | Storage capacity for model files |
-| storageClassName | local-path | Storage class (adjust for your cluster) |
+When context is retrieved, it's injected into the system message:
 
-### Storage Requirements
+```
+[Original system message]
 
-| Model | Approximate Size |
-|-------|------------------|
-| Qwen2.5-Coder-14B-GPTQ-Int4 | ~10GB |
-| Qwen2.5-Coder-7B-GPTQ-Int4 | ~5GB |
-| Additional cache overhead | ~5GB |
+## Relevant Context
 
-50Gi provides headroom for model updates and multiple cached versions.
+The following information was retrieved from the knowledge base:
+
+**Source:** operations.md
+The deployment pipeline uses ArgoCD to sync manifests from Git...
+---
+
+**Source:** architecture.md
+The system consists of three main components...
+---
+
+Use this context to inform your response. If the context doesn't contain relevant information, rely on your general knowledge.
+```
 
 ## Data Flow
 
 ```
-ConfigMap (vllm-config)
-        │
-        ▼
-┌───────────────────┐
-│  vLLM Container   │
-│                   │
-│  Reads config via │
-│  environment vars │
-└───────────────────┘
-        │
-        ▼
-┌───────────────────┐
-│  HuggingFace Hub  │
-│  (model download) │
-└───────────────────┘
-        │
-        ▼
-┌───────────────────┐
-│  PVC (model-cache)│
-│  /root/.cache/    │
-│  huggingface      │
-└───────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        Request Flow                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Client Request                                                  │
+│       │                                                          │
+│       ▼                                                          │
+│  ┌─────────────────┐                                            │
+│  │ Extract Query   │  "How does deployment work?"               │
+│  └────────┬────────┘                                            │
+│           │                                                      │
+│           ▼                                                      │
+│  ┌─────────────────┐     ┌─────────────────┐                   │
+│  │ Retrieve Context│────▶│ Knowledge Base  │                   │
+│  └────────┬────────┘     │ /v1/retrieve    │                   │
+│           │              └─────────────────┘                    │
+│           │                                                      │
+│           ▼                                                      │
+│  ┌─────────────────┐                                            │
+│  │ Filter by Score │  score >= 0.5                              │
+│  └────────┬────────┘                                            │
+│           │                                                      │
+│           ▼                                                      │
+│  ┌─────────────────┐                                            │
+│  │ Build Context   │  Format chunks with sources                │
+│  └────────┬────────┘                                            │
+│           │                                                      │
+│           ▼                                                      │
+│  ┌─────────────────┐                                            │
+│  │ Augment System  │  Inject context into system message        │
+│  │ Message         │                                            │
+│  └────────┬────────┘                                            │
+│           │                                                      │
+│           ▼                                                      │
+│  ┌─────────────────┐     ┌─────────────────┐                   │
+│  │ Forward to vLLM │────▶│ vLLM            │                   │
+│  └────────┬────────┘     │ /v1/chat/...    │                   │
+│           │              └─────────────────┘                    │
+│           │                                                      │
+│           ▼                                                      │
+│  Response to Client                                              │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 **Source**
+- `manifests/orchestrator/configmap.yaml`
 - `manifests/model-server/configmap.yaml`
-- `manifests/model-server/resource-quota.yaml`
-- `manifests/model-server/limit-range.yaml`
-- `manifests/model-server/pvc.yaml`
+- `src/orchestrator/models.py`
+- `src/orchestrator/rag_chain.py`

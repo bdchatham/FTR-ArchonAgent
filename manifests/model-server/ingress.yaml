@@ -1,13 +1,12 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: vllm
+  name: archon
   namespace: archon-system
   labels:
-    app: vllm
-    app.kubernetes.io/name: vllm
+    app: archon
+    app.kubernetes.io/name: archon
     app.kubernetes.io/part-of: archon
-    app.kubernetes.io/component: model-server
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
@@ -15,7 +14,19 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
+    # Main entry point routes to RAG orchestrator
     - host: archon.home.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: archon-rag
+                port:
+                  number: 8080
+    # Direct vLLM access (bypass RAG)
+    - host: vllm.home.local
       http:
         paths:
           - path: /

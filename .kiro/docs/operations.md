@@ -2,20 +2,22 @@
 
 ## Prerequisites
 
-Before deploying the model server:
+Before deploying:
 
-1. **NVIDIA RuntimeClass** must exist in the cluster
-2. **NVIDIA Device Plugin** must be deployed
-3. **GPU availability** verified on target node
-4. **ArgoCD** installed in the cluster
-5. **nginx Ingress Controller** deployed (for external access)
-
-The Agent and Knowledge Base can be deployed independently - there is no required deployment order between them.
+1. **NVIDIA RuntimeClass** must exist (for vLLM)
+2. **Knowledge Base** should be deployed (for RAG - optional, degrades gracefully)
+3. **ArgoCD** installed in the cluster
+4. **nginx Ingress Controller** deployed
 
 ## Deployment
 
-### Via Tekton Pipeline
+### Deploy vLLM Model Server
 
+```bash
+kubectl apply -k manifests/model-server/
+```
+
+Or via Tekton pipeline:
 ```bash
 kubectl create -f - <<EOF
 apiVersion: tekton.dev/v1
@@ -29,171 +31,174 @@ spec:
 EOF
 ```
 
-### Via kubectl (direct)
+### Deploy RAG Orchestrator
 
 ```bash
-kubectl apply -k manifests/model-server/
+kubectl apply -k manifests/orchestrator/
 ```
 
 ### Verify Deployment
 
 ```bash
-# Check pod status
-kubectl get pods -n archon-system -l app=vllm
+# Check pods
+kubectl get pods -n archon-system
 
-# Watch startup progress
-kubectl logs -n archon-system -l app=vllm -f
+# Check services
+kubectl get svc -n archon-system
 
-# Check service
-kubectl get svc -n archon-system vllm
+# Test health endpoints
+kubectl port-forward svc/archon-rag 8080:8080 -n archon-system &
+curl http://localhost:8080/health
+curl http://localhost:8080/ready
 
-# Test health endpoint
-kubectl port-forward svc/vllm 8000:8000 -n archon-system &
-curl http://localhost:8000/health
+# Test chat completion
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 50}'
 ```
 
 ## Monitoring
 
 ### Key Metrics
 
-- **Pod status**: Running, Pending, CrashLoopBackOff
-- **GPU utilization**: Via `nvidia-smi` on host
-- **Memory usage**: Pod memory vs limits
-- **Request latency**: Time to first token, total generation time
+**Orchestrator**:
+- Request latency (total, RAG, vLLM)
+- Context chunks retrieved per request
+- Degraded mode occurrences
+
+**vLLM**:
+- GPU utilization
+- Memory usage
+- Inference latency
 
 ### Health Endpoints
 
-| Endpoint | Purpose |
-|----------|---------|
-| `/health` | Liveness/readiness check |
-| `/v1/models` | List loaded models |
+| Service | Endpoint | Purpose |
+|---------|----------|---------|
+| Orchestrator | `/health` | Liveness |
+| Orchestrator | `/ready` | Readiness (checks KB + vLLM) |
+| vLLM | `/health` | Liveness/readiness |
 
 ### Logs
 
 ```bash
-# Current logs
-kubectl logs -n archon-system -l app=vllm
+# Orchestrator logs
+kubectl logs -n archon-system -l app=archon-rag -f
 
-# Previous container logs (after crash)
-kubectl logs -n archon-system -l app=vllm --previous
-```
-
-## Alerting
-
-Monitor for:
-
-- Pod not ready for >5 minutes after startup
-- CrashLoopBackOff status
-- GPU memory exhaustion (OOM)
-- High request latency (>30s for typical queries)
-
-## Runbooks
-
-### Pod Stuck in Pending
-
-**Symptoms**: Pod remains in Pending state
-
-**Diagnosis**:
-```bash
-kubectl describe pod -n archon-system -l app=vllm
-```
-
-**Common causes**:
-- "Insufficient nvidia.com/gpu": GPU not available or already allocated
-- "RuntimeClass not found": Deploy RuntimeClass first
-- "Insufficient memory": Node lacks required memory
-
-**Resolution**:
-1. Check GPU availability: `kubectl describe nodes | grep nvidia.com/gpu`
-2. Verify RuntimeClass exists: `kubectl get runtimeclass nvidia`
-3. Check if another pod is using the GPU
-
-### Pod in CrashLoopBackOff
-
-**Symptoms**: Pod repeatedly crashes
-
-**Diagnosis**:
-```bash
-kubectl logs -n archon-system -l app=vllm --previous
-```
-
-**Common causes**:
-- CUDA OOM: Model too large for VRAM
-- Model download failed: Network issues
-- Invalid model name: Typo in configmap
-
-**Resolution**:
-1. For OOM: Reduce `gpu_memory_utilization` or `max_model_len` in configmap
-2. For download failures: Check network, verify model name on HuggingFace
-3. For invalid model: Correct the `llm_model` value in configmap
-
-### Slow Model Loading
-
-**Symptoms**: Pod takes >30 minutes to become ready
-
-**Diagnosis**:
-```bash
+# vLLM logs
 kubectl logs -n archon-system -l app=vllm -f
 ```
 
-**Common causes**:
-- First-time model download (expected: 15-30 min)
-- Slow network connection
-- PVC not properly mounted
+## Runbooks
 
-**Resolution**:
-1. First startup is slow - wait for download to complete
-2. Verify PVC is bound: `kubectl get pvc -n archon-system`
-3. Check download progress in logs
+### Orchestrator Not Ready
 
-### High Inference Latency
-
-**Symptoms**: Requests take >30 seconds
+**Symptoms**: `/ready` returns 503
 
 **Diagnosis**:
 ```bash
-# Check GPU utilization on host
-nvidia-smi
-
-# Check pod resource usage
-kubectl top pod -n archon-system
+curl http://localhost:8080/ready
+kubectl logs -n archon-system -l app=archon-rag
 ```
 
 **Common causes**:
-- Long input context
-- High `max_tokens` in request
-- GPU thermal throttling
+- vLLM not ready (GPU loading)
+- KB unavailable (degraded mode, not failure)
 
 **Resolution**:
-1. Reduce `max_tokens` in requests
-2. Check GPU temperature on host
-3. Consider reducing `max_model_len` for faster inference
+1. Check vLLM status: `kubectl get pods -n archon-system -l app=vllm`
+2. If vLLM is loading, wait for startup (15-30 min first time)
+3. If KB is unavailable, orchestrator will work in degraded mode
 
-## Maintenance
+### No Context Being Retrieved
 
-### Model Updates
+**Symptoms**: Responses don't include KB context
 
-To change the LLM model:
+**Diagnosis**:
+```bash
+# Check orchestrator logs for retrieval
+kubectl logs -n archon-system -l app=archon-rag | grep -i retriev
 
-1. Edit `manifests/model-server/configmap.yaml`
-2. Update `llm_model` value
-3. Commit and push changes
-4. ArgoCD will sync and restart the pod
-5. New model will be downloaded (15-30 min)
+# Check KB health
+kubectl get pods -n archon-knowledge-base
+```
 
-### Scaling
+**Common causes**:
+- KB service unavailable
+- Similarity threshold too high
+- No relevant documents in KB
 
-The model server runs as a single replica due to GPU constraints. For higher throughput:
+**Resolution**:
+1. Verify KB is running: `kubectl get pods -n archon-knowledge-base`
+2. Lower `RAG_SIMILARITY_THRESHOLD` in configmap
+3. Verify documents are ingested in KB
 
-1. Deploy additional GPU nodes
-2. Create separate deployments per GPU
-3. Use a load balancer across instances
+### High Latency
 
-### Backup
+**Symptoms**: Requests take >10 seconds
 
-The model cache PVC contains downloaded models only - no backup required. Models are re-downloaded from HuggingFace if PVC is lost.
+**Diagnosis**:
+```bash
+# Check orchestrator logs for timing
+kubectl logs -n archon-system -l app=archon-rag | grep -i latency
+```
+
+**Common causes**:
+- KB retrieval slow
+- vLLM inference slow (long context)
+- Network issues
+
+**Resolution**:
+1. Check RAG latency vs vLLM latency in logs
+2. Reduce `RAG_CONTEXT_CHUNKS` to inject less context
+3. Reduce `max_tokens` in requests
+
+### vLLM OOM
+
+**Symptoms**: vLLM pod crashes with OOM
+
+**Resolution**:
+1. Reduce `gpu_memory_utilization` in vLLM configmap
+2. Reduce `max_model_len` in vLLM configmap
+3. Consider smaller model
+
+## Configuration Changes
+
+### Disable RAG
+
+Set `RAG_ENABLED=false` in orchestrator configmap:
+```bash
+kubectl patch configmap archon-rag-config -n archon-system \
+  --type merge -p '{"data":{"RAG_ENABLED":"false"}}'
+kubectl rollout restart deployment/archon-rag -n archon-system
+```
+
+### Adjust Context Chunks
+
+```bash
+kubectl patch configmap archon-rag-config -n archon-system \
+  --type merge -p '{"data":{"RAG_CONTEXT_CHUNKS":"3"}}'
+kubectl rollout restart deployment/archon-rag -n archon-system
+```
+
+### Change Similarity Threshold
+
+```bash
+kubectl patch configmap archon-rag-config -n archon-system \
+  --type merge -p '{"data":{"RAG_SIMILARITY_THRESHOLD":"0.7"}}'
+kubectl rollout restart deployment/archon-rag -n archon-system
+```
+
+## Scaling
+
+**Orchestrator**: Can scale horizontally (stateless)
+```bash
+kubectl scale deployment/archon-rag -n archon-system --replicas=3
+```
+
+**vLLM**: Single replica per GPU. For more throughput, add GPU nodes.
 
 **Source**
-- `manifests/model-server/deployment.yaml`
-- `manifests/model-server/configmap.yaml`
-- `pipeline/deploy-model-server.yaml`
+- `manifests/orchestrator/` - Orchestrator manifests
+- `manifests/model-server/` - vLLM manifests
+- `src/orchestrator/config.py` - Configuration options
