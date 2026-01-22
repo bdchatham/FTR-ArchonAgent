@@ -1,10 +1,8 @@
-"""Pydantic models for RAG Orchestrator."""
+"""Pydantic models for RAG Orchestrator API."""
 
 from typing import Optional
 from pydantic import BaseModel
 
-
-# OpenAI-compatible chat completion models
 
 class ChatMessage(BaseModel):
     """A single message in a chat conversation."""
@@ -46,30 +44,6 @@ class ChatCompletionResponse(BaseModel):
     choices: list[ChatCompletionChoice]
     usage: Optional[ChatCompletionUsage] = None
 
-
-# Knowledge Base retrieval models
-
-class RetrievalRequest(BaseModel):
-    """Request to Knowledge Base /v1/retrieve endpoint."""
-    query: str
-    k: int = 5
-
-
-class RetrievalChunk(BaseModel):
-    """A retrieved document chunk."""
-    content: str
-    source: str
-    chunk_index: Optional[int] = None
-    score: float
-
-
-class RetrievalResponse(BaseModel):
-    """Response from Knowledge Base /v1/retrieve endpoint."""
-    chunks: list[RetrievalChunk]
-    query: str
-
-
-# Health check models
 
 class HealthResponse(BaseModel):
     """Health check response."""

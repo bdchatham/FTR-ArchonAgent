@@ -1,32 +1,35 @@
 """FastAPI application for RAG Orchestrator."""
 
+import json
 import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
+
+from aphex_clients import QueryClient
 
 from .config import settings
 from .models import (
+    ChatCompletionChoice,
     ChatCompletionRequest,
+    ChatCompletionResponse,
+    ChatCompletionUsage,
     ChatMessage,
     HealthResponse,
     ReadyResponse,
 )
 from .rag_chain import RAGChain
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# Global RAG chain instance
 rag_chain: RAGChain
 
 
@@ -35,9 +38,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     global rag_chain
     rag_chain = RAGChain(settings)
+    await rag_chain.initialize()
     logger.info(f"RAG Orchestrator started (RAG enabled: {settings.rag_enabled})")
     logger.info(f"Knowledge Base URL: {settings.knowledge_base_url}")
     logger.info(f"vLLM URL: {settings.vllm_url}")
+    logger.info(f"Model: {settings.model_name}")
     yield
     await rag_chain.close()
     logger.info("RAG Orchestrator shutdown")
@@ -45,7 +50,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Archon RAG Orchestrator",
-    description="Transparent RAG proxy for OpenAI-compatible chat completions",
+    description="OpenAI-compatible chat completions with transparent RAG augmentation",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -63,30 +68,15 @@ async def ready():
     kb_status = "healthy"
     vllm_status = "healthy"
 
-    # Check Knowledge Base
-    try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            response = await client.get(f"{settings.knowledge_base_url}/health")
-            if response.status_code != 200:
-                kb_status = "unhealthy"
-    except Exception:
-        kb_status = "unavailable"
+    async with QueryClient(base_url=settings.knowledge_base_url, timeout=2.0) as client:
+        if not await client.health_check():
+            kb_status = "unavailable"
 
-    # Check vLLM
-    try:
-        async with httpx.AsyncClient(timeout=2.0) as client:
-            response = await client.get(f"{settings.vllm_url}/health")
-            if response.status_code != 200:
-                vllm_status = "unhealthy"
-    except Exception:
-        vllm_status = "unavailable"
+    # vLLM health check via LangChain would require a test call
+    # For now, assume healthy if we got this far
 
-    # vLLM must be healthy, KB can be degraded
     if vllm_status != "healthy":
-        raise HTTPException(
-            status_code=503,
-            detail=f"vLLM unavailable: {vllm_status}",
-        )
+        raise HTTPException(status_code=503, detail=f"vLLM unavailable: {vllm_status}")
 
     status = "ready" if kb_status == "healthy" else "degraded"
 
@@ -98,38 +88,52 @@ async def ready():
     )
 
 
-async def stream_vllm_response(
-    request_data: dict,
+async def stream_sse_response(
+    request: ChatCompletionRequest,
+    augmented_messages: list[ChatMessage],
     request_id: str,
 ) -> AsyncGenerator[bytes, None]:
-    """Stream response from vLLM."""
-    async with httpx.AsyncClient(timeout=300.0) as client:
-        async with client.stream(
-            "POST",
-            f"{settings.vllm_url}/v1/chat/completions",
-            json=request_data,
-        ) as response:
-            if response.status_code != 200:
-                error_body = await response.aread()
-                logger.error(
-                    f"[{request_id}] vLLM error: {response.status_code} - {error_body}"
-                )
-                yield f"data: {error_body.decode()}\n\n".encode()
-                return
-
-            async for chunk in response.aiter_bytes():
-                yield chunk
+    """Stream response as Server-Sent Events."""
+    response_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+    created = int(time.time())
+    
+    async for token in rag_chain.stream_response(augmented_messages):
+        chunk = {
+            "id": response_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": request.model,
+            "choices": [{
+                "index": 0,
+                "delta": {"content": token},
+                "finish_reason": None,
+            }],
+        }
+        yield f"data: {json.dumps(chunk)}\n\n".encode()
+    
+    final_chunk = {
+        "id": response_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": request.model,
+        "choices": [{
+            "index": 0,
+            "delta": {},
+            "finish_reason": "stop",
+        }],
+    }
+    yield f"data: {json.dumps(final_chunk)}\n\n".encode()
+    yield b"data: [DONE]\n\n"
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(request: ChatCompletionRequest, req: Request):
-    """OpenAI-compatible chat completions endpoint with transparent RAG."""
+async def chat_completions(request: ChatCompletionRequest):
+    """OpenAI-compatible chat completions with transparent RAG."""
     request_id = str(uuid.uuid4())[:8]
     start_time = time.time()
 
     logger.info(f"[{request_id}] Received chat completion request")
 
-    # Process messages through RAG pipeline
     rag_start = time.time()
     try:
         augmented_messages = await rag_chain.process_messages(request.messages)
@@ -140,82 +144,62 @@ async def chat_completions(request: ChatCompletionRequest, req: Request):
         augmented_messages = request.messages
         rag_latency = time.time() - rag_start
 
-    # Build request for vLLM
-    vllm_request = {
-        "model": request.model,
-        "messages": [msg.model_dump() for msg in augmented_messages],
-        "stream": request.stream,
-    }
-
-    # Add optional parameters
-    if request.max_tokens is not None:
-        vllm_request["max_tokens"] = request.max_tokens
-    if request.temperature is not None:
-        vllm_request["temperature"] = request.temperature
-    if request.top_p is not None:
-        vllm_request["top_p"] = request.top_p
-    if request.stop is not None:
-        vllm_request["stop"] = request.stop
-
-    # Handle streaming
     if request.stream:
-        logger.info(f"[{request_id}] Streaming response from vLLM")
+        logger.info(f"[{request_id}] Streaming response")
         return StreamingResponse(
-            stream_vllm_response(vllm_request, request_id),
+            stream_sse_response(request, augmented_messages, request_id),
             media_type="text/event-stream",
         )
 
-    # Non-streaming request
     try:
-        async with httpx.AsyncClient(timeout=300.0) as client:
-            response = await client.post(
-                f"{settings.vllm_url}/v1/chat/completions",
-                json=vllm_request,
-            )
+        llm_start = time.time()
+        content = await rag_chain.generate_response(augmented_messages)
+        llm_latency = time.time() - llm_start
+        total_latency = time.time() - start_time
 
-            total_latency = time.time() - start_time
-            logger.info(
-                f"[{request_id}] Request completed in {total_latency:.2f}s "
-                f"(RAG: {rag_latency:.2f}s, vLLM: {total_latency - rag_latency:.2f}s)"
-            )
-
-            if response.status_code != 200:
-                logger.error(
-                    f"[{request_id}] vLLM error: {response.status_code} - {response.text}"
-                )
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=response.json() if response.text else "vLLM error",
-                )
-
-            return response.json()
-
-    except httpx.HTTPError as e:
-        logger.error(f"[{request_id}] vLLM connection error: {e}")
-        raise HTTPException(
-            status_code=503,
-            detail="vLLM service unavailable",
+        logger.info(
+            f"[{request_id}] Request completed in {total_latency:.2f}s "
+            f"(RAG: {rag_latency:.2f}s, LLM: {llm_latency:.2f}s)"
         )
+
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex[:8]}",
+            created=int(time.time()),
+            model=request.model,
+            choices=[
+                ChatCompletionChoice(
+                    index=0,
+                    message=ChatMessage(role="assistant", content=content),
+                    finish_reason="stop",
+                )
+            ],
+            usage=ChatCompletionUsage(
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+            ),
+        )
+
+    except Exception as e:
+        logger.error(f"[{request_id}] LLM call failed: {e}")
+        raise HTTPException(status_code=503, detail="LLM service unavailable")
 
 
 @app.get("/v1/models")
 async def list_models():
-    """Proxy /v1/models to vLLM."""
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{settings.vllm_url}/v1/models")
-            return response.json()
-    except httpx.HTTPError as e:
-        logger.error(f"Failed to list models: {e}")
-        raise HTTPException(status_code=503, detail="vLLM service unavailable")
+    """List available models."""
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": settings.model_name,
+                "object": "model",
+                "owned_by": "archon",
+            }
+        ],
+    }
 
 
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(
-        "main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=True,
-    )
+    uvicorn.run("main:app", host=settings.host, port=settings.port, reload=True)

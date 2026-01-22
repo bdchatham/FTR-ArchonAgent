@@ -1,116 +1,104 @@
-"""LangChain RAG chain for context augmentation."""
+"""RAG chain using LangChain for context augmentation and LLM calls."""
 
 import logging
-from typing import Optional
+from typing import AsyncIterator, List
 
-import httpx
+from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 
+from aphex_clients import QueryClient
+
 from .config import Settings
-from .models import ChatMessage, RetrievalChunk, RetrievalResponse
+from .models import ChatMessage
+from .retriever import KnowledgeBaseRetriever
 
 logger = logging.getLogger(__name__)
 
+CONTEXT_TEMPLATE = """## Relevant Context
+
+The following information was retrieved from the knowledge base:
+
+{context}
+
+Use this context to inform your response. If the context doesn't contain relevant information, rely on your general knowledge."""
+
 
 class RAGChain:
-    """RAG chain that retrieves context and augments prompts."""
+    """RAG chain using LangChain for orchestration."""
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.llm = ChatOpenAI(
-            base_url=f"{settings.vllm_url}/v1",
-            api_key="not-needed",
-            model="Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4",
-        )
-        self._http_client: Optional[httpx.AsyncClient] = None
+        self._query_client: QueryClient | None = None
+        self._retriever: KnowledgeBaseRetriever | None = None
+        self._llm: ChatOpenAI | None = None
 
-    async def get_http_client(self) -> httpx.AsyncClient:
-        """Get or create async HTTP client."""
-        if self._http_client is None or self._http_client.is_closed:
-            self._http_client = httpx.AsyncClient(
-                timeout=httpx.Timeout(self.settings.rag_retrieval_timeout)
-            )
-        return self._http_client
+    async def initialize(self):
+        """Initialize clients and chain components."""
+        self._query_client = QueryClient(
+            base_url=self.settings.knowledge_base_url,
+            timeout=self.settings.rag_retrieval_timeout,
+        )
+        
+        self._retriever = KnowledgeBaseRetriever(
+            query_client=self._query_client,
+            k=self.settings.rag_context_chunks,
+            score_threshold=self.settings.rag_similarity_threshold,
+        )
+        
+        self._llm = ChatOpenAI(
+            base_url=f"{self.settings.vllm_url}/v1",
+            api_key="not-needed",
+            model=self.settings.model_name,
+            streaming=True,
+        )
 
     async def close(self):
-        """Close HTTP client."""
-        if self._http_client and not self._http_client.is_closed:
-            await self._http_client.aclose()
+        """Close clients."""
+        if self._query_client:
+            await self._query_client._client.aclose()
 
-    async def retrieve_context(self, query: str) -> list[RetrievalChunk]:
-        """Retrieve relevant context from Knowledge Base."""
-        if not self.settings.rag_enabled:
-            return []
-
-        try:
-            client = await self.get_http_client()
-            response = await client.post(
-                f"{self.settings.knowledge_base_url}/v1/retrieve",
-                json={"query": query, "k": self.settings.rag_context_chunks},
-            )
-            response.raise_for_status()
-
-            data = RetrievalResponse(**response.json())
-            
-            # Filter by similarity threshold
-            chunks = [
-                chunk for chunk in data.chunks
-                if chunk.score >= self.settings.rag_similarity_threshold
-            ]
-            
-            logger.info(
-                f"Retrieved {len(chunks)} chunks (filtered from {len(data.chunks)}) "
-                f"for query: {query[:50]}..."
-            )
-            return chunks
-
-        except httpx.TimeoutException:
-            logger.warning(
-                f"Knowledge Base retrieval timed out after "
-                f"{self.settings.rag_retrieval_timeout}s"
-            )
-            return []
-        except httpx.HTTPError as e:
-            logger.warning(f"Knowledge Base retrieval failed: {e}")
-            return []
-        except Exception as e:
-            logger.warning(f"Unexpected error during retrieval: {e}")
-            return []
-
-    def build_context_prompt(self, chunks: list[RetrievalChunk]) -> str:
-        """Build context string from retrieved chunks."""
-        if not chunks:
+    def _format_context(self, documents: List[Document]) -> str:
+        """Format retrieved documents into context string."""
+        if not documents:
             return ""
+        
+        parts = []
+        for doc in documents:
+            source = doc.metadata.get("source", "unknown")
+            source_name = source.split("/")[-1] if "/" in source else source
+            parts.append(f"**Source:** {source_name}\n{doc.page_content}")
+        
+        context = "\n\n---\n\n".join(parts)
+        return CONTEXT_TEMPLATE.format(context=context)
 
-        context_parts = [
-            "## Relevant Context",
-            "",
-            "The following information was retrieved from the knowledge base:",
-            "",
-        ]
+    def _convert_messages(self, messages: List[ChatMessage]):
+        """Convert API messages to LangChain message types."""
+        converted = []
+        for msg in messages:
+            if msg.role == "system":
+                converted.append(SystemMessage(content=msg.content))
+            elif msg.role == "user":
+                converted.append(HumanMessage(content=msg.content))
+            elif msg.role == "assistant":
+                converted.append(AIMessage(content=msg.content))
+        return converted
 
-        for chunk in chunks:
-            # Extract filename from source path
-            source_name = chunk.source.split("/")[-1] if "/" in chunk.source else chunk.source
-            context_parts.append(f"**Source:** {source_name}")
-            context_parts.append(chunk.content)
-            context_parts.append("---")
-            context_parts.append("")
+    def _extract_query(self, messages: List[ChatMessage]) -> str:
+        """Extract query from last user message."""
+        for msg in reversed(messages):
+            if msg.role == "user":
+                return msg.content
+        return ""
 
-        context_parts.append(
-            "Use this context to inform your response. "
-            "If the context doesn't contain relevant information, "
-            "rely on your general knowledge."
-        )
-
-        return "\n".join(context_parts)
-
-    def augment_messages(
+    def _augment_messages(
         self,
-        messages: list[ChatMessage],
+        messages: List[ChatMessage],
         context: str,
-    ) -> list[ChatMessage]:
-        """Augment messages with retrieved context."""
+    ) -> List[ChatMessage]:
+        """Inject context into messages."""
         if not context:
             return messages
 
@@ -119,7 +107,6 @@ class RAGChain:
 
         for msg in messages:
             if msg.role == "system" and not system_found:
-                # Append context to existing system message
                 augmented.append(
                     ChatMessage(
                         role="system",
@@ -130,46 +117,43 @@ class RAGChain:
             else:
                 augmented.append(msg)
 
-        # If no system message, prepend one with context
         if not system_found:
-            augmented.insert(
-                0,
-                ChatMessage(role="system", content=context),
-            )
+            augmented.insert(0, ChatMessage(role="system", content=context))
 
         return augmented
-
-    def extract_query(self, messages: list[ChatMessage]) -> str:
-        """Extract the user's query from the last user message."""
-        for msg in reversed(messages):
-            if msg.role == "user":
-                return msg.content
-        return ""
 
     async def process_messages(
         self,
-        messages: list[ChatMessage],
-    ) -> list[ChatMessage]:
+        messages: List[ChatMessage],
+    ) -> List[ChatMessage]:
         """Process messages through RAG pipeline."""
         if not self.settings.rag_enabled:
-            logger.debug("RAG disabled, returning original messages")
             return messages
 
-        # Extract query from last user message
-        query = self.extract_query(messages)
+        query = self._extract_query(messages)
         if not query:
-            logger.debug("No user message found, returning original messages")
             return messages
 
-        # Retrieve context
-        chunks = await self.retrieve_context(query)
-        if not chunks:
-            logger.debug("No context retrieved, returning original messages")
+        documents = await self._retriever._aretrieve(query)
+        if not documents:
             return messages
 
-        # Build context prompt and augment messages
-        context = self.build_context_prompt(chunks)
-        augmented = self.augment_messages(messages, context)
+        context = self._format_context(documents)
+        return self._augment_messages(messages, context)
 
-        logger.info(f"Augmented messages with {len(chunks)} context chunks")
-        return augmented
+    async def stream_response(
+        self,
+        messages: List[ChatMessage],
+    ) -> AsyncIterator[str]:
+        """Stream LLM response for augmented messages."""
+        langchain_messages = self._convert_messages(messages)
+        
+        async for chunk in self._llm.astream(langchain_messages):
+            if chunk.content:
+                yield chunk.content
+
+    async def generate_response(self, messages: List[ChatMessage]) -> str:
+        """Generate complete LLM response for augmented messages."""
+        langchain_messages = self._convert_messages(messages)
+        response = await self._llm.ainvoke(langchain_messages)
+        return response.content
