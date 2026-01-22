@@ -43,20 +43,30 @@ ArchonAgent provides a transparent RAG proxy in front of vLLM. Clients send stan
 
 ### RAG Orchestrator
 
-Lightweight FastAPI service that coordinates retrieval and inference:
+FastAPI service using LangChain for RAG orchestration:
 
 - **Image**: `ghcr.io/bdchatham/archon-rag-orchestrator:latest`
 - **Port**: 8080
 - **Resources**: 256-512Mi memory, 100-500m CPU
-- **Framework**: FastAPI + LangChain
+- **Framework**: FastAPI + LangChain + aphex-service-clients
 
-Key responsibilities:
+**Components:**
+- `KnowledgeBaseRetriever` - LangChain `BaseRetriever` wrapping `QueryClient`
+- `RAGChain` - Orchestrates retrieval and prompt augmentation
+- `ChatOpenAI` - LangChain wrapper for vLLM calls with streaming
+
+**Key responsibilities:**
 1. Parse incoming OpenAI chat completion requests
 2. Extract user query from conversation
-3. Call Knowledge Base to retrieve relevant context
+3. Retrieve context via `KnowledgeBaseRetriever` (uses `QueryClient` with retry)
 4. Augment system prompt with retrieved context
-5. Forward augmented request to vLLM
-6. Return response in OpenAI format
+5. Call vLLM via LangChain `ChatOpenAI`
+6. Stream or return response in OpenAI format
+
+**Source**
+- `src/orchestrator/main.py`
+- `src/orchestrator/rag_chain.py`
+- `src/orchestrator/retriever.py`
 
 ### vLLM Model Server
 
@@ -98,14 +108,18 @@ The orchestrator degrades gracefully when dependencies are unavailable:
 | Scenario | Behavior |
 |----------|----------|
 | KB unreachable | Forward to vLLM without augmentation |
-| KB timeout (>5s) | Forward to vLLM without augmentation |
+| KB timeout (>10s) | Forward to vLLM without augmentation (after retries) |
 | KB returns empty | Forward to vLLM without augmentation |
 | vLLM unreachable | Return 503 Service Unavailable |
+
+**Retry Behavior:**
+The `QueryClient` from `aphex-service-clients` provides automatic retry with exponential backoff and jitter on transient failures (connection errors, timeouts).
 
 ## Technology Stack
 
 - **FastAPI**: Async web framework for orchestrator
-- **LangChain**: RAG chain construction and prompt management
+- **LangChain**: RAG orchestration, retriever abstraction, LLM wrapper
+- **aphex-service-clients**: `QueryClient` with retry/backoff for Knowledge Base
 - **vLLM**: High-throughput LLM serving engine
 - **Qwen2.5-Coder-14B**: Code-optimized LLM
 - **Kubernetes**: Container orchestration
@@ -116,6 +130,7 @@ The orchestrator degrades gracefully when dependencies are unavailable:
 ### Upstream Dependencies
 
 - **ArchonKnowledgeBaseInfrastructure**: Provides `/v1/retrieve` for context retrieval
+- **AphexServiceClients**: Provides `QueryClient` with retry logic
 - **NVIDIA RuntimeClass**: Required for vLLM GPU access
 - **nginx Ingress Controller**: For external access
 
@@ -126,5 +141,6 @@ None - this is the top of the inference stack.
 **Source**
 - `src/orchestrator/main.py` - Orchestrator FastAPI app
 - `src/orchestrator/rag_chain.py` - LangChain RAG logic
+- `src/orchestrator/retriever.py` - LangChain retriever wrapping QueryClient
 - `manifests/orchestrator/` - Orchestrator Kubernetes manifests
 - `manifests/model-server/` - vLLM Kubernetes manifests
