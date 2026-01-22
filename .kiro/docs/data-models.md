@@ -32,7 +32,7 @@ data:
 | RAG_ENABLED | bool | true | Enable RAG augmentation |
 | RAG_CONTEXT_CHUNKS | int | 5 | Number of chunks to retrieve |
 | RAG_SIMILARITY_THRESHOLD | float | 0.5 | Minimum similarity score (0-1) |
-| RAG_RETRIEVAL_TIMEOUT | float | 5.0 | KB retrieval timeout in seconds |
+| RAG_RETRIEVAL_TIMEOUT | float | 10.0 | KB retrieval timeout in seconds |
 
 ### Tuning RAG_CONTEXT_CHUNKS
 

@@ -169,7 +169,7 @@ The orchestrator behavior is controlled by environment variables:
 | `RAG_ENABLED` | true | Enable/disable RAG augmentation |
 | `RAG_CONTEXT_CHUNKS` | 5 | Number of chunks to retrieve |
 | `RAG_SIMILARITY_THRESHOLD` | 0.5 | Minimum similarity score (0-1) |
-| `RAG_RETRIEVAL_TIMEOUT` | 5.0 | Timeout for KB retrieval (seconds) |
+| `RAG_RETRIEVAL_TIMEOUT` | 10.0 | Timeout for KB retrieval (seconds) |
 
 ## Integration Examples
 
