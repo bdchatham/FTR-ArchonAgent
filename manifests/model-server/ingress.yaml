@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: archon
-  namespace: archon-system
+  namespace: archon-model-server
   labels:
     app: archon
     app.kubernetes.io/name: archon

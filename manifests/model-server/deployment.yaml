@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vllm
-  namespace: archon-system
+  namespace: archon-model-server
   labels:
     app: vllm
     app.kubernetes.io/name: vllm
