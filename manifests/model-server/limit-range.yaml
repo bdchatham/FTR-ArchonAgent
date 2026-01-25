@@ -15,4 +15,8 @@ spec:
       defaultRequest:
         memory: "256Mi"
         cpu: "100m"
+      max:
+        memory: "32Gi"
+        cpu: "16"
+        nvidia.com/gpu: "1"
       type: Container
