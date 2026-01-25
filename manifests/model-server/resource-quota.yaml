@@ -11,3 +11,7 @@ spec:
   hard:
     requests.nvidia.com/gpu: "1"
     limits.nvidia.com/gpu: "1"
+    requests.memory: "32Gi"
+    limits.memory: "48Gi"
+    requests.cpu: "16"
+    limits.cpu: "32"
