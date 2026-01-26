@@ -16,4 +16,4 @@ data:
   gpu_memory_utilization: "0.90"
   max_model_len: "8192"
   tensor_parallel_size: "1"
-  quantization: "gptq"
+  quantization: "gptq_marlin"
