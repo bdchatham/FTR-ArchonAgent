@@ -8,8 +8,8 @@ ArchonAgent exposes an OpenAI-compatible REST API for chat completions. The RAG 
 
 - **RAG-enabled (recommended)**: `http://archon.home.local`
 - **Direct vLLM (bypass RAG)**: `http://vllm.home.local`
-- **Internal orchestrator**: `http://archon-rag.archon-system.svc.cluster.local:8080`
-- **Internal vLLM**: `http://vllm.archon-system.svc.cluster.local:8000`
+- **Internal orchestrator**: `http://archon-rag.archon-orchestrator.svc.cluster.local:8080`
+- **Internal vLLM**: `http://vllm.archon-model-server.svc.cluster.local:8000`
 
 ## Endpoints
 

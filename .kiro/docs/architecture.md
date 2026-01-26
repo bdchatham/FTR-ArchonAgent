@@ -4,39 +4,55 @@
 
 ArchonAgent provides a transparent RAG proxy in front of vLLM. Clients send standard OpenAI chat completion requests; the orchestrator retrieves context from the Knowledge Base, augments the prompt, and forwards to vLLM.
 
-```
-┌──────────┐                        ┌─────────────────────────────────────────────┐
-│  Client  │   /v1/chat/completions │              archon-system namespace        │
-│          │ ──────────────────────▶│                                             │
-└──────────┘   archon.home.local    │  ┌───────────────────────────────────────┐  │
-                                    │  │         RAG Orchestrator              │  │
-                                    │  │         (archon-rag:8080)             │  │
-                                    │  │                                       │  │
-                                    │  │  1. Extract query from messages       │  │
-                                    │  │  2. Retrieve context from KB ─────────┼──┼──┐
-                                    │  │  3. Augment prompt with context       │  │  │
-                                    │  │  4. Forward to vLLM ──────────────────┼──┼──┼──┐
-                                    │  │  5. Return response                   │  │  │  │
-                                    │  └───────────────────────────────────────┘  │  │  │
-                                    │                                             │  │  │
-                                    │  ┌───────────────────────────────────────┐  │  │  │
-                                    │  │              vLLM                     │◀─┼──┼──┘
-                                    │  │         (vllm:8000)                   │  │  │
-                                    │  │                                       │  │  │
-                                    │  │  Model: Qwen2.5-Coder-14B-GPTQ-Int4  │  │  │
-                                    │  │  GPU: nvidia.com/gpu: 1              │  │  │
-                                    │  └───────────────────────────────────────┘  │  │
-                                    └─────────────────────────────────────────────┘  │
-                                                                                     │
-                                    ┌─────────────────────────────────────────────┐  │
-                                    │       archon-knowledge-base namespace       │  │
-                                    │                                             │  │
-                                    │  ┌───────────────────────────────────────┐  │  │
-                                    │  │           Query Service               │◀─┼──┘
-                                    │  │         (query:8080)                  │  │
-                                    │  │         POST /v1/retrieve             │  │
-                                    │  └───────────────────────────────────────┘  │
-                                    └─────────────────────────────────────────────┘
+### Component Separation
+
+The system is deliberately split into two independent components deployed in separate namespaces:
+
+**RAG Orchestrator** (`archon-orchestrator` namespace):
+- Lightweight Python service (FastAPI + LangChain)
+- Handles RAG logic: retrieval, prompt augmentation, request routing
+- Minimal resource requirements (256-512Mi memory, 100-500m CPU)
+- Can be updated independently without affecting model serving
+- Scales horizontally for request handling
+
+**vLLM Model Server** (`archon-model-server` namespace):
+- GPU-intensive inference engine
+- Requires dedicated GPU resources (1 GPU, 16-24Gi memory)
+- Long startup time (model download and loading)
+- Expensive to restart or scale
+- Provides pure LLM inference without RAG logic
+
+**Benefits of Separation:**
+- **Independent scaling**: Scale orchestrator for request volume, model server for inference throughput
+- **Independent updates**: Update RAG logic without restarting expensive GPU workloads
+- **Resource isolation**: Orchestrator failures don't affect model server availability
+- **Cost optimization**: Run multiple lightweight orchestrators with different RAG strategies against one model server
+- **Namespace isolation**: Separate RBAC, resource quotas, and network policies per component
+
+```mermaid
+graph TB
+    Client[Client]
+    
+    subgraph archon-orchestrator
+        Orchestrator[RAG Orchestrator<br/>archon-rag:8080]
+    end
+    
+    subgraph archon-model-server
+        vLLM[vLLM Model Server<br/>vllm:8000<br/>Qwen2.5-Coder-14B-GPTQ-Int4]
+    end
+    
+    subgraph archon-knowledge-base
+        Query[Query Service<br/>query:8080]
+    end
+    
+    Client -->|POST /v1/chat/completions| Orchestrator
+    Orchestrator -->|1. Extract query| Orchestrator
+    Orchestrator -->|2. POST /v1/retrieve| Query
+    Query -->|Context chunks| Orchestrator
+    Orchestrator -->|3. Augment prompt| Orchestrator
+    Orchestrator -->|4. POST /v1/chat/completions| vLLM
+    vLLM -->|Response| Orchestrator
+    Orchestrator -->|5. Return response| Client
 ```
 
 ## Components
@@ -72,7 +88,7 @@ FastAPI service using LangChain for RAG orchestration:
 
 GPU-accelerated inference engine:
 
-- **Image**: `vllm/vllm-openai:v0.4.0`
+- **Image**: `vllm/vllm-openai:v0.14.1-cu130`
 - **RuntimeClass**: `nvidia` for GPU access
 - **Resources**: 16-24Gi memory, 4-8 CPU cores, 1 GPU
 - **Model**: Qwen2.5-Coder-14B-Instruct-GPTQ-Int4

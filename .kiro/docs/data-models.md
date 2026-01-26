@@ -13,10 +13,10 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: archon-rag-config
-  namespace: archon-system
+  namespace: archon-orchestrator
 data:
   KNOWLEDGE_BASE_URL: "http://query.archon-knowledge-base.svc.cluster.local:8080"
-  VLLM_URL: "http://vllm.archon-system.svc.cluster.local:8000"
+  VLLM_URL: "http://vllm.archon-model-server.svc.cluster.local:8000"
   RAG_ENABLED: "true"
   RAG_CONTEXT_CHUNKS: "5"
   RAG_SIMILARITY_THRESHOLD: "0.5"
@@ -55,13 +55,13 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: vllm-config
-  namespace: archon-system
+  namespace: archon-model-server
 data:
   llm_model: "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4"
   gpu_memory_utilization: "0.90"
   max_model_len: "8192"
   tensor_parallel_size: "1"
-  quantization: "gptq"
+  quantization: "gptq_marlin"
 ```
 
 ### Fields

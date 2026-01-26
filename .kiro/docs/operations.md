@@ -40,14 +40,18 @@ kubectl apply -k manifests/orchestrator/
 ### Verify Deployment
 
 ```bash
-# Check pods
-kubectl get pods -n archon-system
+# Check orchestrator pods
+kubectl get pods -n archon-orchestrator
+
+# Check model server pods
+kubectl get pods -n archon-model-server
 
 # Check services
-kubectl get svc -n archon-system
+kubectl get svc -n archon-orchestrator
+kubectl get svc -n archon-model-server
 
-# Test health endpoints
-kubectl port-forward svc/archon-rag 8080:8080 -n archon-system &
+# Test orchestrator health endpoints
+kubectl port-forward svc/archon-rag 8080:8080 -n archon-orchestrator &
 curl http://localhost:8080/health
 curl http://localhost:8080/ready
 
@@ -83,10 +87,10 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 
 ```bash
 # Orchestrator logs
-kubectl logs -n archon-system -l app=archon-rag -f
+kubectl logs -n archon-orchestrator -l app=archon-rag -f
 
 # vLLM logs
-kubectl logs -n archon-system -l app=vllm -f
+kubectl logs -n archon-model-server -l app=vllm -f
 ```
 
 ## Runbooks
@@ -98,7 +102,7 @@ kubectl logs -n archon-system -l app=vllm -f
 **Diagnosis**:
 ```bash
 curl http://localhost:8080/ready
-kubectl logs -n archon-system -l app=archon-rag
+kubectl logs -n archon-orchestrator -l app=archon-rag
 ```
 
 **Common causes**:
@@ -106,7 +110,7 @@ kubectl logs -n archon-system -l app=archon-rag
 - KB unavailable (degraded mode, not failure)
 
 **Resolution**:
-1. Check vLLM status: `kubectl get pods -n archon-system -l app=vllm`
+1. Check vLLM status: `kubectl get pods -n archon-model-server -l app=vllm`
 2. If vLLM is loading, wait for startup (15-30 min first time)
 3. If KB is unavailable, orchestrator will work in degraded mode
 
@@ -117,7 +121,7 @@ kubectl logs -n archon-system -l app=archon-rag
 **Diagnosis**:
 ```bash
 # Check orchestrator logs for retrieval
-kubectl logs -n archon-system -l app=archon-rag | grep -i retriev
+kubectl logs -n archon-orchestrator -l app=archon-rag | grep -i retriev
 
 # Check KB health
 kubectl get pods -n archon-knowledge-base
@@ -140,7 +144,7 @@ kubectl get pods -n archon-knowledge-base
 **Diagnosis**:
 ```bash
 # Check orchestrator logs for timing
-kubectl logs -n archon-system -l app=archon-rag | grep -i latency
+kubectl logs -n archon-orchestrator -l app=archon-rag | grep -i latency
 ```
 
 **Common causes**:
@@ -168,32 +172,32 @@ kubectl logs -n archon-system -l app=archon-rag | grep -i latency
 
 Set `RAG_ENABLED=false` in orchestrator configmap:
 ```bash
-kubectl patch configmap archon-rag-config -n archon-system \
+kubectl patch configmap archon-rag-config -n archon-orchestrator \
   --type merge -p '{"data":{"RAG_ENABLED":"false"}}'
-kubectl rollout restart deployment/archon-rag -n archon-system
+kubectl rollout restart deployment/archon-rag -n archon-orchestrator
 ```
 
 ### Adjust Context Chunks
 
 ```bash
-kubectl patch configmap archon-rag-config -n archon-system \
+kubectl patch configmap archon-rag-config -n archon-orchestrator \
   --type merge -p '{"data":{"RAG_CONTEXT_CHUNKS":"3"}}'
-kubectl rollout restart deployment/archon-rag -n archon-system
+kubectl rollout restart deployment/archon-rag -n archon-orchestrator
 ```
 
 ### Change Similarity Threshold
 
 ```bash
-kubectl patch configmap archon-rag-config -n archon-system \
+kubectl patch configmap archon-rag-config -n archon-orchestrator \
   --type merge -p '{"data":{"RAG_SIMILARITY_THRESHOLD":"0.7"}}'
-kubectl rollout restart deployment/archon-rag -n archon-system
+kubectl rollout restart deployment/archon-rag -n archon-orchestrator
 ```
 
 ## Scaling
 
 **Orchestrator**: Can scale horizontally (stateless)
 ```bash
-kubectl scale deployment/archon-rag -n archon-system --replicas=3
+kubectl scale deployment/archon-rag -n archon-orchestrator --replicas=3
 ```
 
 **vLLM**: Single replica per GPU. For more throughput, add GPU nodes.

@@ -22,6 +22,8 @@ Documentation in this repository follows the Archon documentation contract defin
 - **ConfigMap** - Externalized configuration for both services
 - **Tekton Pipeline** - GitOps deployment via ArgoCD
 
+The orchestrator and model server are deployed as separate components in different namespaces (`archon-orchestrator` and `archon-model-server`). This separation enables independent scaling, updates, and resource management.
+
 ## Deployment
 
 The services run in Kubernetes with:
