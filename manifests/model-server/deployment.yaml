@@ -29,6 +29,8 @@ spec:
             - containerPort: 8000
               name: http
           env:
+            - name: VLLM_PORT
+              value: "8000"
             - name: MODEL_NAME
               valueFrom:
                 configMapKeyRef:
