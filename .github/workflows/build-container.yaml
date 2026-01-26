@@ -2,7 +2,7 @@ name: Build and Push Containers
 
 on:
   push:
-    branches: [main]
+    branches: [mainline]
     paths:
       - 'src/orchestrator/**'
       - 'Dockerfile.orchestrator'
@@ -38,7 +38,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/archon-rag-orchestrator
           tags: |
             type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/mainline' }}
       
       - name: Build and push orchestrator image
         uses: docker/build-push-action@v5

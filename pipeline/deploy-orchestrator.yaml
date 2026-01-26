@@ -1,0 +1,73 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: deploy-orchestrator
+  namespace: pipeline-system
+  labels:
+    app: archon-agent
+    component: orchestrator
+spec:
+  description: >-
+    Deploys the RAG orchestrator via ArgoCD.
+    The orchestrator provides transparent RAG augmentation for LLM requests.
+
+  params:
+    - name: git-url
+      type: string
+      description: Git repository URL containing the manifests
+      default: https://github.com/bdchatham/ArchonAgent
+    - name: git-revision
+      type: string
+      description: Git revision (branch, tag, or commit SHA)
+      default: mainline
+    - name: manifest-path
+      type: string
+      description: Path within the repository containing orchestrator manifests
+      default: manifests/orchestrator
+    - name: app-name
+      type: string
+      description: Name of the ArgoCD Application
+      default: archon-inference-orchestrator
+    - name: app-project
+      type: string
+      description: ArgoCD AppProject for isolation
+      default: archon-inference-orchestrator
+    - name: target-namespace
+      type: string
+      description: Target namespace for orchestrator deployment
+      default: archon-inference-orchestrator
+
+  tasks:
+    - name: deploy-to-argocd
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: argocd-deployment
+          - name: namespace
+            value: tekton-pipelines
+      params:
+        - name: app-name
+          value: $(params.app-name)
+        - name: app-project
+          value: $(params.app-project)
+        - name: repo-url
+          value: $(params.git-url)
+        - name: repo-revision
+          value: $(params.git-revision)
+        - name: manifest-path
+          value: $(params.manifest-path)
+        - name: target-namespace
+          value: $(params.target-namespace)
+        - name: auto-sync
+          value: "true"
+        - name: prune
+          value: "true"
+        - name: self-heal
+          value: "true"
+        - name: create-namespace
+          value: "false"
+        - name: kubectl-image
+          value: "bitnami/kubectl:latest"
