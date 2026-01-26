@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: archon-rag
-  namespace: archon-inference-orchestrator
+  namespace: archon-orchestrator
   labels:
     app: archon-rag
     app.kubernetes.io/name: archon-rag
