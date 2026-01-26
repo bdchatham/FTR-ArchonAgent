@@ -27,7 +27,7 @@ spec:
     - name: app-name
       type: string
       description: Name of the ArgoCD Application
-      default: archon-inference-orchestrator
+      default: archon-orchestrator
     - name: app-project
       type: string
       description: ArgoCD AppProject for isolation
