@@ -31,11 +31,11 @@ spec:
     - name: app-project
       type: string
       description: ArgoCD AppProject for isolation
-      default: archon-inference-orchestrator
+      default: archon-orchestrator
     - name: target-namespace
       type: string
       description: Target namespace for orchestrator deployment
-      default: archon-inference-orchestrator
+      default: archon-orchestrator
 
   tasks:
     - name: deploy-to-argocd
