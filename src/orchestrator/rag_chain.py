@@ -38,7 +38,7 @@ class RAGChain:
     async def initialize(self):
         """Initialize clients and chain components."""
         self._query_client = QueryClient(
-            base_url=self.settings.knowledge_base_url,
+            base_url=self.settings.query_url,
             timeout=self.settings.rag_retrieval_timeout,
         )
         
@@ -49,7 +49,7 @@ class RAGChain:
         )
         
         self._llm = ChatOpenAI(
-            base_url=f"{self.settings.vllm_url}/v1",
+            base_url=f"{self.settings.model_url}/v1",
             api_key="not-needed",
             model=self.settings.model_name,
             streaming=True,

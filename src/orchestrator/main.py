@@ -40,8 +40,8 @@ async def lifespan(app: FastAPI):
     rag_chain = RAGChain(settings)
     await rag_chain.initialize()
     logger.info(f"RAG Orchestrator started (RAG enabled: {settings.rag_enabled})")
-    logger.info(f"Knowledge Base URL: {settings.knowledge_base_url}")
-    logger.info(f"vLLM URL: {settings.vllm_url}")
+    logger.info(f"Knowledge Base URL: {settings.query_url}")
+    logger.info(f"Model URL: {settings.model_url}")
     logger.info(f"Model: {settings.model_name}")
     yield
     await rag_chain.close()
@@ -68,7 +68,7 @@ async def ready():
     kb_status = "healthy"
     vllm_status = "healthy"
 
-    async with QueryClient(base_url=settings.knowledge_base_url, timeout=2.0) as client:
+    async with QueryClient(base_url=settings.query_url, timeout=2.0) as client:
         if not await client.health_check():
             kb_status = "unavailable"
 

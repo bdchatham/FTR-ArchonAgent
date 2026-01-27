@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     """Orchestrator configuration from environment variables."""
 
     # Service URLs
-    knowledge_base_url: str = "http://query.archon-knowledge-base.svc.cluster.local:8080"
-    vllm_url: str = "http://vllm.archon-system.svc.cluster.local:8000"
+    query_url: str = "http://query.archon-knowledge-base.svc.cluster.local:8080"
+    model_url: str = "http://vllm.archon-system.svc.cluster.local:8000"
 
     # Model settings
     model_name: str = "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4"
