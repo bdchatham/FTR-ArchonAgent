@@ -2,67 +2,116 @@
 
 ## System Design
 
-ArchonAgent provides a transparent RAG proxy in front of vLLM. Clients send standard OpenAI chat completion requests; the orchestrator retrieves context from the Knowledge Base, augments the prompt, and forwards to vLLM.
+ArchonAgent uses a **declarative CRD-based architecture**. The Agent CRD specifies desired configuration; the platform controller provisions and manages infrastructure.
 
-### Component Separation
+### Agent CRD Model
 
-The system is deliberately split into two independent components deployed in separate namespaces:
+```yaml
+apiVersion: aphex.io/v1alpha1
+kind: Agent
+metadata:
+  name: archon-assistant
+  namespace: org-archon
+spec:
+  displayName: "Archon Assistant"
+  model:
+    provider: vllm
+    name: Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
+    quantization: gptq_marlin
+    gpuCount: 1
+  knowledgeBase:
+    name: platform-docs
+    namespace: archon-knowledge-base
+  orchestration:
+    image: ghcr.io/bdchatham/archon-rag-orchestrator:latest
+    port: 8080
+```
 
-**RAG Orchestrator** (`archon-orchestrator` namespace):
-- Lightweight Python service (FastAPI + LangChain)
-- Handles RAG logic: retrieval, prompt augmentation, request routing
-- Minimal resource requirements (256-512Mi memory, 100-500m CPU)
-- Can be updated independently without affecting model serving
-- Scales horizontally for request handling
+The platform controller watches this CRD and provisions:
+- Model server deployment (vLLM with GPU)
+- Orchestrator deployment (if `spec.orchestration` is set)
+- Services and networking
+- ConfigMaps with environment configuration
 
-**vLLM Model Server** (`archon-model-server` namespace):
-- GPU-intensive inference engine
-- Requires dedicated GPU resources (1 GPU, 16-24Gi memory)
-- Long startup time (model download and loading)
-- Expensive to restart or scale
-- Provides pure LLM inference without RAG logic
-
-**Benefits of Separation:**
-- **Independent scaling**: Scale orchestrator for request volume, model server for inference throughput
-- **Independent updates**: Update RAG logic without restarting expensive GPU workloads
-- **Resource isolation**: Orchestrator failures don't affect model server availability
-- **Cost optimization**: Run multiple lightweight orchestrators with different RAG strategies against one model server
-- **Namespace isolation**: Separate RBAC, resource quotas, and network policies per component
+### Data Flow
 
 ```mermaid
 graph TB
+    Git[Git Repository<br/>manifests/agent.yaml]
+    ArgoCD[ArgoCD]
+    AgentCRD[Agent CRD<br/>org-archon namespace]
+    Controller[Platform Controller]
+    
+    subgraph Provisioned Resources
+        ModelServer[Model Server<br/>vLLM + GPU]
+        Orchestrator[Orchestrator<br/>RAG Proxy]
+        KB[Knowledge Base<br/>Query Service]
+    end
+    
     Client[Client]
     
-    subgraph archon-orchestrator
-        Orchestrator[RAG Orchestrator<br/>archon-rag:8080]
-    end
-    
-    subgraph archon-model-server
-        vLLM[vLLM Model Server<br/>vllm:8000<br/>Qwen2.5-Coder-14B-GPTQ-Int4]
-    end
-    
-    subgraph archon-knowledge-base
-        Query[Query Service<br/>query:8080]
-    end
+    Git -->|Syncs| ArgoCD
+    ArgoCD -->|Creates/Updates| AgentCRD
+    AgentCRD -->|Watches| Controller
+    Controller -->|Provisions| ModelServer
+    Controller -->|Provisions| Orchestrator
     
     Client -->|POST /v1/chat/completions| Orchestrator
-    Orchestrator -->|1. Extract query| Orchestrator
-    Orchestrator -->|2. POST /v1/retrieve| Query
-    Query -->|Context chunks| Orchestrator
-    Orchestrator -->|3. Augment prompt| Orchestrator
-    Orchestrator -->|4. POST /v1/chat/completions| vLLM
-    vLLM -->|Response| Orchestrator
-    Orchestrator -->|5. Return response| Client
+    Orchestrator -->|1. Retrieve context| KB
+    Orchestrator -->|2. Augmented prompt| ModelServer
+    ModelServer -->|3. Response| Orchestrator
+    Orchestrator -->|4. Return| Client
 ```
 
 ## Components
+
+### Agent CRD
+
+Declarative configuration for the agent:
+
+**Required fields:**
+- `spec.displayName` - Human-readable name
+- `spec.model.provider` - Model provider (vllm, openai, anthropic, bedrock)
+- `spec.model.name` - Model identifier
+
+**Optional fields:**
+- `spec.model.quantization` - Quantization method (gptq_marlin, awq, fp16)
+- `spec.model.gpuCount` - Number of GPUs to allocate
+- `spec.model.image` - Container image for model server
+- `spec.model.port` - Model server port
+- `spec.knowledgeBase` - Reference to KnowledgeBase CRD for RAG
+- `spec.orchestration` - Enable orchestrator for unified RAG endpoint
+
+**Source**
+- `manifests/agent.yaml` - Agent CRD manifest
+- Platform controller API types (in AphexPlatformInfrastructure)
+
+### Platform Controller
+
+Kubernetes controller that reconciles Agent CRDs:
+
+**Reconciliation logic:**
+1. Watch for Agent CRD create/update/delete events
+2. Provision model server deployment with GPU resources
+3. Provision orchestrator deployment (if `spec.orchestration` is set)
+4. Create services and ConfigMaps
+5. Update Agent status with deployment state
+
+**Status tracking:**
+- `status.phase` - Current state (Pending, Ready, Failed)
+- `status.modelServer.deployed` - Model server deployment status
+- `status.modelServer.serviceURL` - Internal service URL
+- `status.orchestrator.deployed` - Orchestrator deployment status (if enabled)
+
+**Source**
+- Platform controller in AphexPlatformInfrastructure
 
 ### RAG Orchestrator
 
 FastAPI service using LangChain for RAG orchestration:
 
 - **Image**: `ghcr.io/bdchatham/archon-rag-orchestrator:latest`
-- **Port**: 8080
+- **Port**: 8080 (configurable via `spec.orchestration.port`)
 - **Resources**: 256-512Mi memory, 100-500m CPU
 - **Framework**: FastAPI + LangChain + aphex-service-clients
 
@@ -88,28 +137,23 @@ FastAPI service using LangChain for RAG orchestration:
 
 GPU-accelerated inference engine:
 
-- **Image**: `vllm/vllm-openai:v0.14.1-cu130`
+- **Image**: `vllm/vllm-openai:v0.14.1-cu130` (configurable via `spec.model.image`)
 - **RuntimeClass**: `nvidia` for GPU access
-- **Resources**: 16-24Gi memory, 4-8 CPU cores, 1 GPU
-- **Model**: Qwen2.5-Coder-14B-Instruct-GPTQ-Int4
+- **Resources**: Configured based on `spec.model.gpuCount`
+- **Model**: Specified by `spec.model.name`
 
-### Configuration
+**Configuration:**
+- Model name from `spec.model.name`
+- Quantization from `spec.model.quantization`
+- GPU count from `spec.model.gpuCount`
+- Port from `spec.model.port` (default: 8000)
 
-**Orchestrator ConfigMap** (`archon-rag-config`):
-- `KNOWLEDGE_BASE_URL`: KB query service URL
-- `VLLM_URL`: vLLM service URL
-- `RAG_ENABLED`: Enable/disable RAG augmentation
-- `RAG_CONTEXT_CHUNKS`: Number of chunks to retrieve
-- `RAG_SIMILARITY_THRESHOLD`: Minimum similarity score
-
-**vLLM ConfigMap** (`vllm-config`):
-- `llm_model`: HuggingFace model identifier
-- `gpu_memory_utilization`: VRAM usage fraction
-- `max_model_len`: Maximum context length
+**Source**
+- Platform controller provisions deployment based on Agent CRD
 
 ## Request Flow
 
-1. **Client Request**: Standard OpenAI chat completion request arrives
+1. **Client Request**: Standard OpenAI chat completion request arrives at orchestrator
 2. **Query Extraction**: Orchestrator extracts the last user message
 3. **Context Retrieval**: Orchestrator calls KB `/v1/retrieve` with the query
 4. **Filtering**: Chunks below similarity threshold are discarded
@@ -129,34 +173,34 @@ The orchestrator degrades gracefully when dependencies are unavailable:
 | vLLM unreachable | Return 503 Service Unavailable |
 
 **Retry Behavior:**
-The `QueryClient` from `aphex-service-clients` provides automatic retry with exponential backoff and jitter on transient failures (connection errors, timeouts).
+The `QueryClient` from `aphex-service-clients` provides automatic retry with exponential backoff and jitter on transient failures.
 
 ## Technology Stack
 
+- **Kubernetes CRDs**: Declarative agent configuration
+- **Platform Controller**: Reconciles Agent CRDs to infrastructure
 - **FastAPI**: Async web framework for orchestrator
 - **LangChain**: RAG orchestration, retriever abstraction, LLM wrapper
 - **aphex-service-clients**: `QueryClient` with retry/backoff for Knowledge Base
 - **vLLM**: High-throughput LLM serving engine
 - **Qwen2.5-Coder-14B**: Code-optimized LLM
-- **Kubernetes**: Container orchestration
 - **ArgoCD**: GitOps deployment
 
 ## Dependencies
 
 ### Upstream Dependencies
 
+- **AphexPlatformInfrastructure**: Provides Agent CRD and platform controller
 - **ArchonKnowledgeBaseInfrastructure**: Provides `/v1/retrieve` for context retrieval
 - **AphexServiceClients**: Provides `QueryClient` with retry logic
 - **NVIDIA RuntimeClass**: Required for vLLM GPU access
-- **nginx Ingress Controller**: For external access
 
 ### Downstream Dependencies
 
 None - this is the top of the inference stack.
 
 **Source**
+- `manifests/agent.yaml` - Agent CRD manifest
 - `src/orchestrator/main.py` - Orchestrator FastAPI app
 - `src/orchestrator/rag_chain.py` - LangChain RAG logic
 - `src/orchestrator/retriever.py` - LangChain retriever wrapping QueryClient
-- `manifests/orchestrator/` - Orchestrator Kubernetes manifests
-- `manifests/model-server/` - vLLM Kubernetes manifests

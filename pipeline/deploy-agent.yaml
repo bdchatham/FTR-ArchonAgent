@@ -1,15 +1,18 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: deploy-orchestrator
-  namespace: pipeline-system
+  name: deploy-agent
   labels:
-    app: archon-agent
-    component: orchestrator
+    app.kubernetes.io/part-of: archon-agent
 spec:
   description: >-
-    Deploys the RAG orchestrator via ArgoCD.
-    The orchestrator provides transparent RAG augmentation for LLM requests.
+    Deploys the Archon Agent via ArgoCD.
+    
+    This pipeline creates an ArgoCD Application that syncs the Agent CRD
+    from Git. The platform controller watches the Agent CRD and provisions:
+    - Model server (vLLM with GPU support)
+    - Orchestrator (unified RAG endpoint)
+    - Integration with KnowledgeBase
 
   params:
     - name: git-url
@@ -22,20 +25,20 @@ spec:
       default: mainline
     - name: manifest-path
       type: string
-      description: Path within the repository containing orchestrator manifests
-      default: manifests/orchestrator
+      description: Path within the repository containing Kubernetes manifests
+      default: manifests
     - name: app-name
       type: string
       description: Name of the ArgoCD Application
-      default: archon-orchestrator
+      default: archon-agent
+    - name: target-namespace
+      type: string
+      description: Target namespace for deployment
+      default: org-archon
     - name: app-project
       type: string
       description: ArgoCD AppProject for isolation
-      default: archon-orchestrator
-    - name: target-namespace
-      type: string
-      description: Target namespace for orchestrator deployment
-      default: archon-orchestrator
+      default: default
 
   tasks:
     - name: deploy-to-argocd
