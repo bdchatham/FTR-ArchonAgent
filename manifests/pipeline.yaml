@@ -1,0 +1,122 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-pipeline
+  namespace: archon-system
+  labels:
+    app.kubernetes.io/name: agent-pipeline
+    app.kubernetes.io/part-of: archon
+    app.kubernetes.io/component: pipeline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-pipeline
+      app.kubernetes.io/component: pipeline
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-pipeline
+        app.kubernetes.io/part-of: archon
+        app.kubernetes.io/component: pipeline
+    spec:
+      containers:
+        - name: agent-pipeline
+          image: ghcr.io/bdchatham/archon-agent-pipeline:latest
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: PIPELINE_GITHUB_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: agent-pipeline-secrets
+                  key: github-webhook-secret
+            - name: PIPELINE_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agent-pipeline-secrets
+                  key: github-token
+            - name: PIPELINE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: agent-pipeline-secrets
+                  key: database-url
+            - name: PIPELINE_LLM_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-pipeline-config
+                  key: llm-url
+            - name: PIPELINE_LLM_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-pipeline-config
+                  key: llm-model
+            - name: PIPELINE_KNOWLEDGE_BASE_NAMESPACE
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-pipeline-config
+                  key: knowledge-base-namespace
+            - name: PIPELINE_KNOWLEDGE_BASE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-pipeline-config
+                  key: knowledge-base-name
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-pipeline
+  namespace: archon-system
+  labels:
+    app.kubernetes.io/name: agent-pipeline
+    app.kubernetes.io/part-of: archon
+    app.kubernetes.io/component: pipeline
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: agent-pipeline
+    app.kubernetes.io/component: pipeline
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-pipeline-config
+  namespace: archon-system
+  labels:
+    app.kubernetes.io/name: agent-pipeline
+    app.kubernetes.io/part-of: archon
+    app.kubernetes.io/component: config
+data:
+  llm-url: "http://archon-assistant-model.org-archon:8000/v1"
+  llm-model: "Qwen/Qwen2.5-Coder-14B-Instruct-GPTQ-Int4"
+  knowledge-base-namespace: "archon-system"
+  knowledge-base-name: "archon-workspace"

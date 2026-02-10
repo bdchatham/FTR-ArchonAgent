@@ -1,0 +1,107 @@
+---
+# TriggerBinding extracts issue event fields from the webhook payload
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: agent-orchestration-binding
+  namespace: archon-system
+  labels:
+    app.kubernetes.io/name: agent-pipeline
+    app.kubernetes.io/part-of: archon
+    app.kubernetes.io/component: trigger
+spec:
+  params:
+    - name: action
+      value: $(body.action)
+    - name: issue-number
+      value: $(body.issue.number)
+    - name: repo-full-name
+      value: $(body.repository.full_name)
+---
+# TriggerTemplate creates a TaskRun that forwards the payload to the
+# agent-pipeline service. This avoids running a full Tekton Pipeline
+# for what is essentially an HTTP dispatch.
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: agent-orchestration-forward
+  namespace: archon-system
+  labels:
+    app.kubernetes.io/name: agent-pipeline
+    app.kubernetes.io/part-of: archon
+    app.kubernetes.io/component: trigger
+spec:
+  params:
+    - name: action
+    - name: issue-number
+    - name: repo-full-name
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: TaskRun
+      metadata:
+        generateName: agent-forward-
+        namespace: archon-system
+        labels:
+          app.kubernetes.io/name: agent-pipeline
+          app.kubernetes.io/part-of: archon
+          app.kubernetes.io/component: forward
+      spec:
+        serviceAccountName: pipeline-runner
+        timeout: 30s
+        taskSpec:
+          steps:
+            - name: forward
+              image: curlimages/curl:latest
+              script: |
+                curl -sf -X POST \
+                  -H "Content-Type: application/json" \
+                  -H "X-GitHub-Event: issues" \
+                  -d @/workspace/payload/body \
+                  http://agent-pipeline.archon-system.svc.cluster.local:8080/webhooks/github
+          workspaces:
+            - name: payload
+        workspaces:
+          - name: payload
+            emptyDir: {}
+---
+# Trigger definition to be added to the org's EventListener.
+# This filters for issue events with the archon-automate label
+# and forwards them to the agent-pipeline service.
+#
+# Add this trigger to the EventListener's triggers array:
+#
+#   triggers:
+#     - ref:
+#         name: agent-orchestration-trigger
+#
+apiVersion: triggers.tekton.dev/v1beta1
+kind: Trigger
+metadata:
+  name: agent-orchestration-trigger
+  namespace: archon-system
+  labels:
+    app.kubernetes.io/name: agent-pipeline
+    app.kubernetes.io/part-of: archon
+    app.kubernetes.io/component: trigger
+spec:
+  interceptors:
+    - ref:
+        name: github
+      params:
+        - name: secretRef
+          value:
+            secretName: github-webhook-secret
+            secretKey: secret
+        - name: eventTypes
+          value: ["issues"]
+    - ref:
+        name: cel
+      params:
+        - name: filter
+          value: >
+            body.action in ['opened', 'edited', 'labeled'] &&
+            body.issue.labels.exists(l, l.name == 'archon-automate')
+  bindings:
+    - ref: agent-orchestration-binding
+  template:
+    ref: agent-orchestration-forward
